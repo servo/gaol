@@ -16,7 +16,7 @@ use platform;
 /// If the process attempts to perform an operation in the list that this platform can prohibit
 /// after the sandbox is entered via `enter()`, the operation will either fail or the process will
 /// be immediately terminated. You can check whether an operation can be prohibited on this
-/// platform with `Operation::prohibition_supported()`.
+/// platform with `Operation::prohibition_support()`.
 ///
 /// Because of platform limitiations, patterns within one profile are not permitted to overlap; the
 /// behavior is undefined if they do. For example, you may not allow metadata reads of the subpath
@@ -44,7 +44,7 @@ pub enum Operation {
 
 /// Describes a path or paths on the filesystem.
 pub enum PathPattern {
-    /// One specific path, which must not represent a directory.
+    /// One specific path.
     Literal(Path),
     /// A directory and all of its contents, recursively.
     Subpath(Path),
@@ -70,5 +70,34 @@ impl Profile {
     pub fn allowed_operations(&self) -> &[Operation] {
         self.allowed_operations.as_slice()
     }
+}
+
+/// How well the prohibition of an operation is supported by this platform.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum ProhibitionLevel {
+    /// This operation can be prohibited precisely on this platform.
+    Precise,
+    /// This operation can be prohibited on a coarse-grained level on this platform. For example,
+    /// at the moment on Linux, networking can be either allowed or prohibited, but it cannot be
+    /// disabled on a per-port basis.
+    Coarse,
+    /// This operation is never allowed on this platform.
+    NeverAllowed,
+    /// This operation is always allowed on this platform (and therefore cannot be prohibited).
+    AlwaysAllowed,
+}
+
+/// Allows operations to be queried to determine how well they can be prohibited on this platform.
+pub trait ProhibitionSupport {
+    /// Returns a `ProhibitionLevel` describing how well this operation can be prohibited on this
+    /// platform.
+    fn prohibition_support(&self) -> ProhibitionLevel;
+}
+
+/// Allows a sandbox to be activated.
+pub trait Activate {
+    /// Enters the sandbox, activating its restrictions forevermore for this process and
+    /// subprocesses. Be sure to check the return code!
+    fn activate(&self) -> Result<(),()>;
 }
 

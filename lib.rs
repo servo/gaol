@@ -8,7 +8,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(collections, core, libc)]
+#![feature(collections, core, env, io, libc, os, path, std_misc)]
 
 extern crate libc;
 

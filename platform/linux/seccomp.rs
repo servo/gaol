@@ -16,6 +16,9 @@
 
 #![allow(non_upper_case_globals)]
 
+use platform::linux::namespace::{CLONE_CHILD_CLEARTID, CLONE_FILES, CLONE_FS};
+use platform::linux::namespace::{CLONE_PARENT_SETTID, CLONE_SETTLS, CLONE_SIGHAND, CLONE_SYSVSEM};
+use platform::linux::namespace::{CLONE_THREAD, CLONE_VM};
 use profile::{Operation, Profile};
 
 use libc::{AF_INET, AF_INET6, AF_UNIX, O_NONBLOCK, O_RDONLY, c_int, c_ulong, c_ushort};
@@ -49,16 +52,6 @@ const ARG_1_OFFSET: u32 = 24;
 const ARG_2_OFFSET: u32 = 32;
 
 const AF_NETLINK: c_int = 16;
-
-const CLONE_VM: c_int = 0x0000_0100;
-const CLONE_FS: c_int = 0x0000_0200;
-const CLONE_FILES: c_int = 0x0000_0400;
-const CLONE_SIGHAND: c_int = 0x0000_0800;
-const CLONE_THREAD: c_int = 0x0001_0000;
-const CLONE_SYSVSEM: c_int = 0x0004_0000;
-const CLONE_SETTLS: c_int = 0x0008_0000;
-const CLONE_PARENT_SETTID: c_int = 0x0010_0000;
-const CLONE_CHILD_CLEARTID: c_int = 0x0020_0000;
 
 const O_NOCTTY: c_int = 256;
 const O_CLOEXEC: c_int = 524288;
