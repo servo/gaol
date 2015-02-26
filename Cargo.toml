@@ -1,0 +1,9 @@
+[package]
+name = "gaol"
+version = "0.0.1"
+authors = ["The Servo Project Developers"]
+
+[lib]
+name = "gaol"
+path = "lib.rs"
+
