@@ -27,6 +27,7 @@ pub struct Profile {
 }
 
 /// An operation that this process is allowed to perform.
+#[derive(Clone, Debug)]
 pub enum Operation {
     /// All file-related reading operations may be performed on this file.
     FileReadAll(PathPattern),
@@ -43,6 +44,7 @@ pub enum Operation {
 }
 
 /// Describes a path or paths on the filesystem.
+#[derive(Clone, Debug)]
 pub enum PathPattern {
     /// One specific path.
     Literal(Path),
@@ -51,6 +53,7 @@ pub enum PathPattern {
 }
 
 /// Describes a network address.
+#[derive(Clone, Debug)]
 pub enum AddressPattern {
     /// TCP connections on the given port.
     Tcp(u16),

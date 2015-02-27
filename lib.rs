@@ -8,7 +8,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(collections, core, env, io, libc, os, path, std_misc)]
+#![allow(unused_features)]
+#![feature(collections, core, env, io, libc, os, path, rustc_private, std_misc)]
+
+#[macro_use]
+extern crate log;
 
 extern crate libc;
 
@@ -17,8 +21,12 @@ pub mod profile;
 pub mod platform {
     #[cfg(target_os="linux")]
     pub use platform::linux::Operation;
+    #[cfg(target_os="macos")]
+    pub use platform::macos::Operation;
 
     #[cfg(target_os="linux")]
     pub mod linux;
+    #[cfg(target_os="macos")]
+    pub mod macos;
 }
 
