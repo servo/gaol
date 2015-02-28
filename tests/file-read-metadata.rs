@@ -23,14 +23,14 @@ fn allowance_test() {
     match Profile::new(vec![
         Operation::FileReadMetadata(PathPattern::Literal(path.clone())),
     ]) {
-        Ok(profile) => drop(path.stat().unwrap()),
-        Err(profile) => {}
+        Ok(_) => drop(path.stat().unwrap()),
+        Err(_) => {}
     }
 }
 
 fn prohibition_test() {
     let path = Path::new(env::var("GAOL_TEMP_FILE").unwrap().to_str().unwrap());
-    let profile = Profile::new(vec![
+    Profile::new(vec![
         Operation::FileReadMetadata(PathPattern::Subpath(Path::new("/bogus")))
     ]).unwrap().activate().unwrap();
     drop(path.stat().unwrap())
