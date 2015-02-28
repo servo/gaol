@@ -10,8 +10,8 @@
 
 //! Sandboxing on Mac OS X via Seatbelt (`sandboxd`).
 
-use profile::{self, Activate, AddressPattern, PathPattern, Profile, ProhibitionLevel};
-use profile::{ProhibitionSupport};
+use profile::{self, Activate, AddressPattern, OperationSupport, OperationSupportLevel};
+use profile::{PathPattern, Profile};
 
 use libc::{c_char, c_int};
 use std::ffi::{AsOsStr, CString};
@@ -24,15 +24,18 @@ static SANDBOX_PROFILE_PROLOGUE: &'static [u8] = b"
 (deny default)
 ";
 
-impl ProhibitionSupport for profile::Operation {
-    fn prohibition_support(&self) -> ProhibitionLevel {
+impl OperationSupport for profile::Operation {
+    fn support(&self) -> OperationSupportLevel {
         match *self {
             profile::Operation::FileReadAll(_) |
             profile::Operation::FileReadMetadata(_) |
-            profile::Operation::NetworkOutbound(_) |
+            profile::Operation::NetworkOutbound(AddressPattern::All) |
+            profile::Operation::NetworkOutbound(AddressPattern::Tcp(_)) |
+            profile::Operation::NetworkOutbound(AddressPattern::LocalSocket(_)) |
             profile::Operation::SystemInfoRead |
-            profile::Operation::SystemSocket |
-            profile::Operation::PlatformSpecific(_) => ProhibitionLevel::Precise,
+            profile::Operation::PlatformSpecific(Operation::MachLookup(_)) => {
+                OperationSupportLevel::CanBeAllowed
+            }
         }
     }
 }
@@ -61,28 +64,28 @@ impl Activate for Profile {
                     sandbox_profile.write_all(b")\n").unwrap();
                 }
                 profile::Operation::NetworkOutbound(ref address_pattern) => {
-                    sandbox_profile.write_all(b"(allow network-outbound (").unwrap();
+                    sandbox_profile.write_all(b"(allow system-socket)\n").unwrap();
+                    sandbox_profile.write_all(b"(allow network-outbound").unwrap();
                     match *address_pattern {
+                        AddressPattern::All => {}
                         AddressPattern::Tcp(port) => {
-                            write!(&mut sandbox_profile, "remote tcp \"*:{}\"", port).unwrap()
+                            write!(&mut sandbox_profile, " (remote tcp \"*:{}\")", port).unwrap()
                         }
                         AddressPattern::LocalSocket(ref path) => {
-                            sandbox_profile.write_all(b"literal ").unwrap();
-                            write_path(&mut sandbox_profile, path)
+                            sandbox_profile.write_all(b"( literal ").unwrap();
+                            write_path(&mut sandbox_profile, path);
+                            sandbox_profile.write_all(b")").unwrap();
                         }
                     }
-                    sandbox_profile.write_all(b"))\n").unwrap();
+                    sandbox_profile.write_all(b")\n").unwrap();
                 }
                 profile::Operation::SystemInfoRead => {
                     sandbox_profile.write_all(b"(allow sysctl-read)\n").unwrap()
                 }
-                profile::Operation::SystemSocket => {
-                    sandbox_profile.write_all(b"(allow system-socket)\n").unwrap()
-                }
                 profile::Operation::PlatformSpecific(Operation::MachLookup(ref service_name)) => {
-                    sandbox_profile.write_all(b"(allow mach_lookup ").unwrap();
+                    sandbox_profile.write_all(b"(allow mach-lookup (global-name ").unwrap();
                     write_quoted_string(&mut sandbox_profile, service_name.as_slice());
-                    sandbox_profile.write_all(b")\n").unwrap();
+                    sandbox_profile.write_all(b"))\n").unwrap();
                 }
             }
         }

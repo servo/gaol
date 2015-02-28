@@ -37,8 +37,6 @@ pub enum Operation {
     NetworkOutbound(AddressPattern),
     /// System information may be read (via `sysctl` on Unix).
     SystemInfoRead,
-    /// Sockets may be created.
-    SystemSocket,
     /// Platform-specific operations.
     PlatformSpecific(platform::Operation),
 }
@@ -55,6 +53,8 @@ pub enum PathPattern {
 /// Describes a network address.
 #[derive(Clone, Debug)]
 pub enum AddressPattern {
+    /// All network addresses.
+    All,
     /// TCP connections on the given port.
     Tcp(u16),
     /// A local socket at the given path (for example, a Unix socket).
@@ -63,9 +63,25 @@ pub enum AddressPattern {
 
 impl Profile {
     /// Creates a new profile with the given set of allowed operations.
-    pub fn new(allowed_operations: Vec<Operation>) -> Profile {
-        Profile {
-            allowed_operations: allowed_operations,
+    ///
+    /// If the operations cannot be allowed precisely on this platform, this returns an error. You
+    /// can then inspect the operations via `OperationSupport::support()` to see which ones cannot
+    /// be allowed and modify the set of allowed operations as necessary. We are deliberately
+    /// strict here to reduce the probability of applications accidentally allowing operations due
+    /// to platform limitations.
+    pub fn new(allowed_operations: Vec<Operation>) -> Result<Profile,()> {
+        if allowed_operations.iter().all(|operation| {
+            match operation.support() {
+                OperationSupportLevel::NeverAllowed | OperationSupportLevel::CanBeAllowed => true,
+                OperationSupportLevel::CannotBeAllowedPrecisely |
+                OperationSupportLevel::AlwaysAllowed => false,
+            }
+        }) {
+            Ok(Profile {
+                allowed_operations: allowed_operations,
+            })
+        } else {
+            Err(())
         }
     }
 
@@ -75,26 +91,28 @@ impl Profile {
     }
 }
 
-/// How well the prohibition of an operation is supported by this platform.
+/// How precisely an operation can be allowed on this platform.
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub enum ProhibitionLevel {
-    /// This operation can be prohibited precisely on this platform.
-    Precise,
-    /// This operation can be prohibited on a coarse-grained level on this platform. For example,
-    /// at the moment on Linux, networking can be either allowed or prohibited, but it cannot be
-    /// disabled on a per-port basis.
-    Coarse,
+pub enum OperationSupportLevel {
     /// This operation is never allowed on this platform.
     NeverAllowed,
-    /// This operation is always allowed on this platform (and therefore cannot be prohibited).
+    /// This operation can be precisely allowed on this platform.
+    CanBeAllowed,
+    /// This operation cannot be allowed precisely on this platform, but another set of operations
+    /// allows it to be allowed on a more coarse-grained level. For example, on Linux, it is not
+    /// possible to allow access to specific ports, but it is possible to allow network access
+    /// entirely.
+    CannotBeAllowedPrecisely,
+    /// This operation is always allowed on this platform.
     AlwaysAllowed,
 }
 
-/// Allows operations to be queried to determine how well they can be prohibited on this platform.
-pub trait ProhibitionSupport {
-    /// Returns a `ProhibitionLevel` describing how well this operation can be prohibited on this
-    /// platform.
-    fn prohibition_support(&self) -> ProhibitionLevel;
+/// Allows operations to be queried to determine how precisely they can be allowed on this
+/// platform.
+pub trait OperationSupport {
+    /// Returns an `OperationSupportLevel` describing how well this operation can be allowed on
+    /// this platform.
+    fn support(&self) -> OperationSupportLevel;
 }
 
 /// Allows a sandbox to be activated.

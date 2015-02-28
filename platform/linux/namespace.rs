@@ -41,12 +41,8 @@ impl Namespace {
             (libc::getuid(), libc::getgid())
         };
 
-        // NB: It would be nice if we could use `CLONE_NEWPID`, but that only works when we spawn a
-        // new process, which is contrary to the design of the sandbox right now. I believe that
-        // the restrictive `seccomp-bpf` filter prevents us doing anything evil with PIDs anyhow
-        // (e.g. sending signals to or ptracing other processes), but we should go over this for
-        // sure.
-        let mut flags = CLONE_FS | CLONE_NEWUSER | CLONE_NEWIPC | CLONE_NEWNS | CLONE_NEWUTS;
+        let mut flags =
+            CLONE_FS | CLONE_NEWUSER | CLONE_NEWIPC | CLONE_NEWNS | CLONE_NEWUTS | CLONE_NEWPID;
 
         // If we don't allow network operations, create a network namespace.
         if !profile.allowed_operations().iter().any(|operation| {
@@ -58,29 +54,38 @@ impl Namespace {
             flags |= CLONE_NEWNET
         }
 
-        let result = unsafe {
-            unshare(flags)
-        };
-        if result == 0 {
-            Ok(Namespace {
-                parent_uid: parent_uid,
-                parent_gid: parent_gid,
-            })
-        } else {
-            Err(result)
+        unsafe {
+            let result = unshare(flags);
+            if result != 0 {
+                Err(result)
+            }
+
+            let pid = libc::fork();
+            let mut stat_loc = 0;
+            if pid != 0 {
+                // If we're the parent, just wait on our child and exit.
+                if libc::waitpid(pid, &mut stat_loc, 0) == -1 {
+                    libc::exit(1)
+                }
+                libc::exit((stat_loc >> 8) & 0xff)
+            }
         }
+
+        // If we got here, we're in the child.
+        Ok(Namespace {
+            parent_uid: parent_uid,
+            parent_gid: parent_gid,
+        })
     }
 
     fn init(&self) -> Result<(),IoError> {
         // See http://crbug.com/457362 for more information on this.
         try!(try!(File::create(&Path::new("/proc/self/setgroups"))).write_all(b"deny"));
 
-        try!(write!(&mut try!(File::create(&Path::new("/proc/self/gid_map"))),
-                    "1 {} 1",
-                    self.parent_gid));
-        write!(&mut try!(File::create(&Path::new("/proc/self/uid_map"))),
-               "1 {} 1",
-               self.parent_uid)
+        try!(try!(File::create(&Path::new("/proc/self/gid_map"))).write_all(
+                format!("1 {} 1", self.parent_gid).as_bytes()));
+        try!(File::create(&Path::new("/proc/self/uid_map"))).write_all(
+            format!("1 {} 1", self.parent_uid).as_bytes())
     }
 }
 
@@ -170,9 +175,7 @@ impl ChrootJail {
         // Create all intermediate directories.
         let mut destination_path = self.directory.path().clone();
         let mut components: Vec<Vec<u8>> =
-            destination_path.components()
-                            .map(|bytes| bytes.iter().map(|x| *x).collect())
-                            .collect();
+            source_path.components().map(|bytes| bytes.iter().map(|x| *x).collect()).collect();
         let last_component = components.pop();
         for component in components.into_iter() {
             destination_path.push(component);
@@ -206,7 +209,6 @@ impl ChrootJail {
         }
 
         // Create the bind mount.
-        destination_path.push(source_path);
         let source_path = CString::from_slice(source_path.as_os_str()
                                                          .to_str()
                                                          .unwrap()
