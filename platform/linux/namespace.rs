@@ -15,10 +15,9 @@ use libc::{self, c_char, c_int, c_ulong, c_void, gid_t, pid_t, uid_t};
 use std::env;
 use std::ffi::{AsOsStr, CString};
 use std::iter;
-use std::old_io::{File, FilePermission, FileStat, FileType, IoError, USER_RWX};
+use std::old_io::{File, FilePermission, FileStat, FileType, IoError};
 use std::old_io::fs;
 use std::ptr;
-use std::rand::{self, Rng, StdRng};
 
 /// Creates a namespace and sets up a chroot jail.
 pub fn activate(profile: &Profile) -> Result<(),c_int> {
@@ -70,7 +69,11 @@ impl Namespace {
                 if waitpid(pid, &mut stat_loc, 0) == -1 {
                     libc::exit(1)
                 }
-                libc::exit((stat_loc >> 8) & 0xff)
+                if !WIFSIGNALED(stat_loc) {
+                    libc::exit(WEXITSTATUS(stat_loc))
+                } else {
+                    libc::exit(255)
+                }
             }
         }
 
@@ -113,7 +116,7 @@ struct ChrootJail {
 
 impl ChrootJail {
     fn new(profile: &Profile) -> Result<ChrootJail,c_int> {
-        let mut prefix = CString::from_slice(b"/tmp/gaol.XXXXXX");
+        let prefix = CString::from_slice(b"/tmp/gaol.XXXXXX");
         let mut prefix: Vec<u8> = prefix.as_bytes_with_nul().iter().map(|x| *x).collect();
         unsafe {
             if mkdtemp(prefix.as_mut_ptr() as *mut c_char).is_null() {
@@ -250,6 +253,16 @@ fn drop_capabilities() -> Result<(),c_int> {
     } else {
         Err(result)
     }
+}
+
+#[allow(non_snake_case)]
+fn WEXITSTATUS(status: c_int) -> c_int {
+    (status >> 8) & 0xff
+}
+
+#[allow(non_snake_case)]
+fn WIFSIGNALED(status: c_int) -> bool {
+    ((((status & 0x7f) + 1) as i8) >> 1) > 0
 }
 
 pub const CLONE_VM: c_int = 0x0000_0100;

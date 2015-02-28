@@ -7,3 +7,23 @@ authors = ["The Servo Project Developers"]
 name = "gaol"
 path = "lib.rs"
 
+[[test]]
+name = "file-read-all"
+path = "tests/file-read-all.rs"
+harness = false
+
+[[test]]
+name = "file-read-metadata"
+path = "tests/file-read-metadata.rs"
+harness = false
+
+[[test]]
+name = "network-outbound"
+path = "tests/network-outbound.rs"
+harness = false
+
+[[test]]
+name = "system-info-read"
+path = "tests/system-info-read.rs"
+harness = false
+

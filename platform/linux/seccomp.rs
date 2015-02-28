@@ -143,15 +143,12 @@ static ALLOWED_SYSCALLS: [u32; 22] = [
     NR_write,
 ];
 
-static ALLOWED_SYSCALLS_FOR_FILE_READ_METADATA: [u32; 4] = [
+static ALLOWED_SYSCALLS_FOR_FILE_READ: [u32; 5] = [
     NR_access,
     NR_fstat,
+    NR_lseek,
     NR_readlink,
     NR_stat,
-];
-
-static ALLOWED_SYSCALLS_FOR_FILE_READ: [u32; 1] = [
-    NR_lseek,
 ];
 
 static ALLOWED_SYSCALLS_FOR_NETWORK_OUTBOUND: [u32; 3] = [
@@ -231,16 +228,7 @@ impl Filter {
 
         if profile.allowed_operations().iter().any(|operation| {
             match *operation {
-                Operation::FileReadMetadata(_) => true,
-                _ => false,
-            }
-        }) {
-            filter.allow_syscalls(&ALLOWED_SYSCALLS_FOR_FILE_READ_METADATA)
-        }
-
-        if profile.allowed_operations().iter().any(|operation| {
-            match *operation {
-                Operation::FileReadAll(_) => true,
+                Operation::FileReadAll(_) | Operation::FileReadMetadata(_) => true,
                 _ => false,
             }
         }) {

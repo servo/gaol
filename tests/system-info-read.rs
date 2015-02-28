@@ -32,41 +32,39 @@ fn look_at_sysctl() {
     }
 }
 
-#[ignore]
-#[test]
 #[cfg(target_os="macos")]
 pub fn allowance_test() {
     Profile::new(vec![Operation::SystemInfoRead]).unwrap().activate().unwrap();
     look_at_sysctl();
 }
 
-#[ignore]
-#[test]
 #[cfg(target_os="macos")]
 pub fn prohibition_test() {
     Profile::new(Vec::new()).unwrap().activate().unwrap();
     look_at_sysctl();
 }
 
-#[test]
 #[cfg(target_os="macos")]
-pub fn bootstrap() {
-    let allowance_status = Command::new(env::current_exe().unwrap()).arg("--ignored")
-                                                                    .arg("allowance_test")
+pub fn main() {
+    match env::args().skip(1).next() {
+        Some(ref arg) if arg == "allowance_test" => return allowance_test(),
+        Some(ref arg) if arg == "prohibition_test" => return prohibition_test(),
+        _ => {}
+    }
+
+    let allowance_status = Command::new(env::current_exe().unwrap()).arg("allowance_test")
                                                                     .status()
                                                                     .unwrap();
     assert!(allowance_status.success());
 
-    let prohibition_status = Command::new(env::current_exe().unwrap()).arg("--ignored")
-                                                                      .arg("prohibition_test")
+    let prohibition_status = Command::new(env::current_exe().unwrap()).arg("prohibition_test")
                                                                       .status()
                                                                       .unwrap();
     assert!(!prohibition_status.success());
 }
 
-#[test]
 #[cfg(not(target_os="macos"))]
-pub fn bootstrap() {
+pub fn main() {
     // Currently unsupported on non-Mac platforms.
 }
 

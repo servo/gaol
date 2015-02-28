@@ -18,28 +18,31 @@ use std::rand::{self, Rng};
 // A conservative overapproximation of `PATH_MAX` on all platforms.
 const PATH_MAX: usize = 4096;
 
-#[ignore]
-#[test]
-pub fn allowance_test() {
+fn allowance_test() {
     let path = Path::new(env::var("GAOL_TEMP_FILE").unwrap().to_str().unwrap());
-    Profile::new(vec![
+    match Profile::new(vec![
         Operation::FileReadMetadata(PathPattern::Literal(path.clone())),
-    ]).unwrap().activate().unwrap();
-    drop(path.stat().unwrap())
+    ]) {
+        Ok(profile) => drop(path.stat().unwrap()),
+        Err(profile) => {}
+    }
 }
 
-#[ignore]
-#[test]
-pub fn prohibition_test() {
+fn prohibition_test() {
     let path = Path::new(env::var("GAOL_TEMP_FILE").unwrap().to_str().unwrap());
-    Profile::new(vec![
+    let profile = Profile::new(vec![
         Operation::FileReadMetadata(PathPattern::Subpath(Path::new("/bogus")))
     ]).unwrap().activate().unwrap();
     drop(path.stat().unwrap())
 }
 
-#[test]
-pub fn bootstrap() {
+pub fn main() {
+    match env::args().skip(1).next() {
+        Some(ref arg) if arg == "allowance_test" => return allowance_test(),
+        Some(ref arg) if arg == "prohibition_test" => return prohibition_test(),
+        _ => {}
+    }
+
     // Need to use `realpath` here for Mac OS X, because the temporary directory is usually a
     // symlink.
     let mut temp_path = env::temp_dir();
@@ -54,16 +57,14 @@ pub fn bootstrap() {
     temp_path.push(format!("gaoltest.{}", suffix));
     File::create(&temp_path).unwrap().write_str("super secret\n").unwrap();
 
-    let allowance_status = Command::new(env::current_exe().unwrap()).arg("--ignored")
-                                                                    .arg("allowance_test")
+    let allowance_status = Command::new(env::current_exe().unwrap()).arg("allowance_test")
                                                                     .env("GAOL_TEMP_FILE",
                                                                          temp_path.clone())
                                                                     .status()
                                                                     .unwrap();
     assert!(allowance_status.success());
 
-    let prohibition_status = Command::new(env::current_exe().unwrap()).arg("--ignored")
-                                                                      .arg("prohibition_test")
+    let prohibition_status = Command::new(env::current_exe().unwrap()).arg("prohibition_test")
                                                                       .env("GAOL_TEMP_FILE",
                                                                            temp_path)
                                                                       .status()

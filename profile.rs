@@ -11,12 +11,65 @@
 use platform;
 
 /// A sandbox profile, which specifies the set of operations that this process is allowed to
-/// perform. Operations not in the list are implicitly denied.
+/// perform. Operations not in the list are implicitly prohibited.
 ///
 /// If the process attempts to perform an operation in the list that this platform can prohibit
-/// after the sandbox is entered via `enter()`, the operation will either fail or the process will
-/// be immediately terminated. You can check whether an operation can be prohibited on this
+/// after the sandbox is entered via `activate()`, the operation will either fail or the process
+/// will be immediately terminated. You can check whether an operation can be prohibited on this
 /// platform with `Operation::prohibition_support()`.
+///
+/// All profiles implicitly prohibit *at least* the following operations. Future versions of `gaol`
+/// may add operations to selectively allow these.
+///
+///    * Opening any file for writing.
+///
+///    * Creating new processes.
+///
+///    * Opening named pipes or System V IPC resources.
+///
+///    * Accessing System V semaphores.
+///
+///    * Sending signals to other processes.
+///
+///    * Tracing other processes.
+///
+///    * Accepting inbound network connections.
+///
+///    * Any operation that requires superuser privileges on the current operating system.
+///
+/// All profiles implicitly *allow* the following operations:
+///
+///    * All pure computation (user-mode CPU instructions that do not cause a context switch to
+///      supervisor mode).
+///
+///    * Memory allocation (for example, via `brk` or anonymous `mmap` on Unix).
+///
+///    * Use of synchronization primitives (mutexes, condition variables).
+///
+///    * Changing memory protection and use policies: for example, marking pages non-writable or
+///      informing the kernel that memory pages may be discarded. (It may be possible to restrict
+///      this in future versions.)
+///
+///    * Spawning new threads.
+///
+///    * Responding to signals (e.g. `signal`, `sigaltstack`).
+///
+///    * Read, write, and memory map of already-opened file descriptors or handles.
+///
+///    * Determining how much has been sent on a file descriptor.
+///
+///    * Sending or receiving on already-opened sockets, including control messages on Unix.
+///
+///    * I/O multiplexing on already-opened sockets and/or file descriptors (`select`/`poll`).
+///
+///    * Opening and closing file descriptors and sockets (but not necessarily connecting them
+///      to anything).
+///
+///    * Determining the user ID.
+///
+///    * Querying and altering thread scheduling options such as CPU affinity.
+///
+///    * Exiting the process.
 ///
 /// Because of platform limitiations, patterns within one profile are not permitted to overlap; the
 /// behavior is undefined if they do. For example, you may not allow metadata reads of the subpath
