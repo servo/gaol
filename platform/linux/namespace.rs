@@ -11,12 +11,14 @@
 //! Sandboxing on Linux via namespaces.
 
 use profile::{Operation, PathPattern, Profile}; 
-use libc::{self, c_char, c_int, c_ulong, c_void, gid_t, uid_t};
+use libc::{self, c_char, c_int, c_ulong, c_void, gid_t, pid_t, uid_t};
 use std::env;
 use std::ffi::{AsOsStr, CString};
-use std::old_io::{File, FilePermission, FileStat, FileType, IoError, TempDir};
+use std::iter;
+use std::old_io::{File, FilePermission, FileStat, FileType, IoError, USER_RWX};
 use std::old_io::fs;
 use std::ptr;
+use std::rand::{self, Rng, StdRng};
 
 /// Creates a namespace and sets up a chroot jail.
 pub fn activate(profile: &Profile) -> Result<(),c_int> {
@@ -26,7 +28,9 @@ pub fn activate(profile: &Profile) -> Result<(),c_int> {
     }
 
     try!(switch_to_unprivileged_user());
-    try!(try!(ChrootJail::new(profile)).enter());
+
+    let jail = try!(ChrootJail::new(profile));
+    try!(jail.enter());
     drop_capabilities()
 }
 
@@ -41,8 +45,7 @@ impl Namespace {
             (libc::getuid(), libc::getgid())
         };
 
-        let mut flags =
-            CLONE_FS | CLONE_NEWUSER | CLONE_NEWIPC | CLONE_NEWNS | CLONE_NEWUTS | CLONE_NEWPID;
+        let mut flags = CLONE_NEWUSER | CLONE_NEWIPC | CLONE_NEWNS | CLONE_NEWUTS | CLONE_NEWPID;
 
         // If we don't allow network operations, create a network namespace.
         if !profile.allowed_operations().iter().any(|operation| {
@@ -57,14 +60,14 @@ impl Namespace {
         unsafe {
             let result = unshare(flags);
             if result != 0 {
-                Err(result)
+                return Err(result)
             }
 
-            let pid = libc::fork();
+            let pid = fork();
             let mut stat_loc = 0;
             if pid != 0 {
                 // If we're the parent, just wait on our child and exit.
-                if libc::waitpid(pid, &mut stat_loc, 0) == -1 {
+                if waitpid(pid, &mut stat_loc, 0) == -1 {
                     libc::exit(1)
                 }
                 libc::exit((stat_loc >> 8) & 0xff)
@@ -105,22 +108,25 @@ fn switch_to_unprivileged_user() -> Result<(),c_int> {
 }
 
 struct ChrootJail {
-    directory: TempDir,
+    directory: Path,
 }
 
 impl ChrootJail {
     fn new(profile: &Profile) -> Result<ChrootJail,c_int> {
-        let jail_dir = match TempDir::new("gaol") {
-            Ok(jail_dir) => jail_dir,
-            Err(_) => return Err(-1),
-        };
+        let mut prefix = CString::from_slice(b"/tmp/gaol.XXXXXX");
+        let mut prefix: Vec<u8> = prefix.as_bytes_with_nul().iter().map(|x| *x).collect();
+        unsafe {
+            if mkdtemp(prefix.as_mut_ptr() as *mut c_char).is_null() {
+                return Err(-1)
+            }
+        }
+        let jail_dir = Path::new(&prefix[..prefix.len() - 1]);
         let jail = ChrootJail {
             directory: jail_dir,
         };
 
         let src = CString::from_slice(b"tmpfs");
         let dest = CString::from_slice(jail.directory
-                                           .path()
                                            .as_os_str()
                                            .to_str()
                                            .unwrap()
@@ -139,11 +145,6 @@ impl ChrootJail {
                 Operation::FileReadAll(PathPattern::Subpath(ref path)) => {
                     try!(jail.bind_mount(path))
                 }
-                Operation::FileReadMetadata(PathPattern::Literal(ref path)) |
-                Operation::FileReadMetadata(PathPattern::Subpath(ref path)) => {
-                    try!(jail.bind_mount(path));
-                    try!(jail.disallow_reading(path));
-                }
                 _ => {}
             }
         }
@@ -153,7 +154,6 @@ impl ChrootJail {
 
     fn enter(&self) -> Result<(),c_int> {
         let directory = CString::from_slice(self.directory
-                                                .path()
                                                 .as_os_str()
                                                 .to_str()
                                                 .unwrap()
@@ -173,7 +173,7 @@ impl ChrootJail {
 
     fn bind_mount(&self, source_path: &Path) -> Result<(),c_int> {
         // Create all intermediate directories.
-        let mut destination_path = self.directory.path().clone();
+        let mut destination_path = self.directory.clone();
         let mut components: Vec<Vec<u8>> =
             source_path.components().map(|bytes| bytes.iter().map(|x| *x).collect()).collect();
         let last_component = components.pop();
@@ -231,35 +231,19 @@ impl ChrootJail {
             Err(result)
         }
     }
-
-    fn disallow_reading(&self, source_path: &Path) -> Result<(),c_int> {
-        let mut destination_path = self.directory.path().clone();
-        destination_path.push(source_path);
-        let destination_path = CString::from_slice(destination_path.as_os_str()
-                                                                   .to_str()
-                                                                   .unwrap()
-                                                                   .as_bytes());
-        let result = unsafe {
-            libc::chmod(destination_path.as_ptr(), 0)
-        };
-        if result == 0 {
-            Ok(())
-        } else {
-            Err(result)
-        }
-    }
 }
 
 fn drop_capabilities() -> Result<(),c_int> {
+    let capability_data: Vec<_> = iter::repeat(__user_cap_data_struct {
+        effective: 0,
+        permitted: 0,
+        inheritable: 0,
+    }).take(_LINUX_CAPABILITY_U32S_3 as usize).collect();
     let result = unsafe {
         capset(&__user_cap_header_struct {
             version: _LINUX_CAPABILITY_VERSION_3,
             pid: 0,
-        }, &__user_cap_data_struct {
-            effective: 0,
-            permitted: 0,
-            inheritable: 0,
-        })
+        }, capability_data.as_ptr())
     };
     if result == 0 {
         Ok(())
@@ -281,6 +265,7 @@ pub const CLONE_CHILD_CLEARTID: c_int = 0x0020_0000;
 pub const CLONE_NEWUTS: c_int = 0x0400_0000;
 pub const CLONE_NEWIPC: c_int = 0x0800_0000;
 pub const CLONE_NEWUSER: c_int = 0x1000_0000;
+pub const CLONE_NEWPID: c_int = 0x2000_0000;
 pub const CLONE_NEWNET: c_int = 0x4000_0000;
 
 const MS_NOATIME: c_ulong = 1024;
@@ -297,6 +282,7 @@ struct __user_cap_header_struct {
 
 #[repr(C)]
 #[allow(non_camel_case_types)]
+#[derive(Copy, Clone)]
 struct __user_cap_data_struct {
     effective: u32,
     permitted: u32,
@@ -310,10 +296,13 @@ type cap_user_header_t = *const __user_cap_header_struct;
 type const_cap_user_data_t = *const __user_cap_data_struct;
 
 const _LINUX_CAPABILITY_VERSION_3: u32 = 0x20080522;
+const _LINUX_CAPABILITY_U32S_3: u32 = 2;
 
 extern {
     fn capset(hdrp: cap_user_header_t, datap: const_cap_user_data_t) -> c_int;
     fn chroot(path: *const c_char) -> c_int;
+    fn fork() -> pid_t;
+    fn mkdtemp(template: *mut c_char) -> *mut c_char;
     fn mount(source: *const c_char,
              target: *const c_char,
              filesystemtype: *const c_char,
@@ -323,5 +312,6 @@ extern {
     fn setresgid(rgid: gid_t, egid: gid_t, sgid: gid_t) -> c_int;
     fn setresuid(ruid: uid_t, euid: uid_t, suid: uid_t) -> c_int;
     fn unshare(flags: c_int) -> c_int;
+    fn waitpid(pid: pid_t, status: *mut c_int, options: c_int) -> pid_t;
 }
 

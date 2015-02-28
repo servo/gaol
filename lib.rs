@@ -8,8 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![allow(unused_features)]
-#![feature(collections, core, env, io, libc, os, path, rustc_private, std_misc)]
+#![allow(deprecated, unused_features)]
+#![feature(collections, core, env, io, libc, os, path, rand, rustc_private, std_misc)]
 
 #[macro_use]
 extern crate log;

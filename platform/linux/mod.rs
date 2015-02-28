@@ -9,30 +9,30 @@
 // except according to those terms.
 
 use platform::linux::seccomp::Filter;
-use profile::{self, Activate, OperationSupport, OperationSupportLevel, Profile};
+use profile::{self, Activate, AddressPattern, OperationSupport, OperationSupportLevel, Profile};
 
 pub mod misc;
 pub mod namespace;
 pub mod seccomp;
 
 #[allow(missing_copy_implementations)]
+#[derive(Clone, Debug)]
 pub struct Operation;
 
 impl OperationSupport for profile::Operation {
     fn support(&self) -> OperationSupportLevel {
         match *self {
             profile::Operation::FileReadAll(_) |
-            profile::Operation::FileReadMetadata(_) |
             profile::Operation::NetworkOutbound(AddressPattern::All) => {
                 OperationSupportLevel::CanBeAllowed
             }
+            profile::Operation::FileReadMetadata(_) |
             profile::Operation::NetworkOutbound(AddressPattern::Tcp(_)) |
             profile::Operation::NetworkOutbound(AddressPattern::LocalSocket(_)) => {
-                ProhibitionLevel::CannotBeAllowedPrecisely
+                OperationSupportLevel::CannotBeAllowedPrecisely
             }
             profile::Operation::SystemInfoRead |
-            profile::Operation::SystemSocket |
-            profile::Operation::PlatformSpecific(_) => ProhibitionLevel::NeverAllowed,
+            profile::Operation::PlatformSpecific(_) => OperationSupportLevel::NeverAllowed,
         }
     }
 }

@@ -154,12 +154,9 @@ static ALLOWED_SYSCALLS_FOR_FILE_READ: [u32; 1] = [
     NR_lseek,
 ];
 
-static ALLOWED_SYSCALLS_FOR_NETWORK_OUTBOUND: [u32; 2] = [
+static ALLOWED_SYSCALLS_FOR_NETWORK_OUTBOUND: [u32; 3] = [
     NR_bind,
     NR_connect,
-];
-
-static ALLOWED_SYSCALLS_FOR_SYSTEM_SOCKET: [u32; 1] = [
     NR_getsockname,
 ];
 
@@ -267,16 +264,7 @@ impl Filter {
                 _ => false,
             }
         }) {
-            filter.allow_syscalls(&ALLOWED_SYSCALLS_FOR_NETWORK_OUTBOUND)
-        }
-
-        if profile.allowed_operations().iter().any(|operation| {
-            match *operation {
-                Operation::SystemSocket => true,
-                _ => false,
-            }
-        }) {
-            filter.allow_syscalls(&ALLOWED_SYSCALLS_FOR_SYSTEM_SOCKET);
+            filter.allow_syscalls(&ALLOWED_SYSCALLS_FOR_NETWORK_OUTBOUND);
 
             // Only allow Unix, IPv4, IPv6, and netlink route sockets to be created.
             filter.if_syscall_is(NR_socket, |filter| {

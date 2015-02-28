@@ -12,7 +12,7 @@
 
 extern crate gaol;
 
-use gaol::profile::{Activate, AddressPattern, Operation, PathPattern, Profile, ProhibitionSupport};
+use gaol::profile::{Activate, AddressPattern, Operation, OperationSupport, PathPattern, Profile};
 use std::env;
 use std::old_io::fs::File;
 
@@ -20,13 +20,12 @@ fn main() {
     let home = env::var("HOME").unwrap().to_str().unwrap().to_string();
     let profile = Profile::new(vec![
         Operation::FileReadAll(PathPattern::Subpath(Path::new(home))),
-        Operation::FileReadMetadata(PathPattern::Literal(Path::new("/etc"))),
-        Operation::NetworkOutbound(AddressPattern::Tcp(80)),
+        Operation::FileReadAll(PathPattern::Literal(Path::new("/etc"))),
+        Operation::NetworkOutbound(AddressPattern::All),
         Operation::SystemInfoRead,
-        Operation::SystemSocket,
-    ]);
+    ]).unwrap();
     for operation in profile.allowed_operations() {
-        println!("{:?}: {:?}", operation, operation.prohibition_support());
+        println!("{:?}: {:?}", operation, operation.support());
     }
     profile.activate().unwrap();
 
