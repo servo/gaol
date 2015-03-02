@@ -17,7 +17,7 @@ use std::env;
 use std::old_io::fs::File;
 
 fn main() {
-    let home = env::var("HOME").unwrap().to_str().unwrap().to_string();
+    let home = env::var("HOME").unwrap();
     let profile = Profile::new(vec![
         Operation::FileReadAll(PathPattern::Subpath(Path::new(home))),
         Operation::FileReadAll(PathPattern::Literal(Path::new("/etc"))),
