@@ -7,12 +7,12 @@
 extern crate gaol;
 extern crate libc;
 
-use gaol::profile::{Activate, Operation, Profile};
+use gaol::profile::{Operation, Profile};
+use gaol::sandbox::{ChildSandbox, ChildSandboxMethods, Command, Sandbox, SandboxMethods};
 use libc::{c_char, c_int, c_void, size_t};
 use std::env;
 use std::ffi::CString;
 use std::iter;
-use std::old_io::process::Command;
 use std::ptr;
 
 static SYSCTL_NAME: &'static str = "hw.ncpu";
@@ -32,15 +32,23 @@ fn look_at_sysctl() {
     }
 }
 
+fn allowance_profile() -> Profile {
+    Profile::new(vec![Operation::SystemInfoRead]).unwrap()
+}
+
+fn prohibition_profile() -> Profile {
+    Profile::new(Vec::new()).unwrap()
+}
+
 #[cfg(target_os="macos")]
 pub fn allowance_test() {
-    Profile::new(vec![Operation::SystemInfoRead]).unwrap().activate().unwrap();
+    ChildSandbox::new(allowance_profile()).activate().unwrap();
     look_at_sysctl();
 }
 
 #[cfg(target_os="macos")]
 pub fn prohibition_test() {
-    Profile::new(Vec::new()).unwrap().activate().unwrap();
+    ChildSandbox::new(prohibition_profile()).activate().unwrap();
     look_at_sysctl();
 }
 
@@ -52,14 +60,19 @@ pub fn main() {
         _ => {}
     }
 
-    let allowance_status = Command::new(env::current_exe().unwrap()).arg("allowance_test")
-                                                                    .status()
-                                                                    .unwrap();
+    let allowance_status =
+        Sandbox::new(allowance_profile()).start(&mut Command::me().unwrap().arg("allowance_test"))
+                                         .unwrap()
+                                         .wait()
+                                         .unwrap();
     assert!(allowance_status.success());
 
-    let prohibition_status = Command::new(env::current_exe().unwrap()).arg("prohibition_test")
-                                                                      .status()
-                                                                      .unwrap();
+    let prohibition_status =
+        Sandbox::new(prohibition_profile()).start(&mut Command::me().unwrap()
+                                                                    .arg("prohibition_test"))
+                                           .unwrap()
+                                           .wait()
+                                           .unwrap();
     assert!(!prohibition_status.success());
 }
 

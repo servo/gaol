@@ -6,22 +6,28 @@
 
 extern crate gaol;
 
-use gaol::profile::{Activate, AddressPattern, Operation, Profile};
+use gaol::profile::{AddressPattern, Operation, Profile};
+use gaol::sandbox::{ChildSandbox, ChildSandboxMethods, Command, Sandbox, SandboxMethods};
 use std::env;
 use std::old_io::{Listener, TcpListener, TcpStream};
-use std::old_io::process::Command;
 
 static ADDRESS: &'static str = "127.0.0.1:7357";
 
+fn allowance_profile() -> Profile {
+    Profile::new(vec![Operation::NetworkOutbound(AddressPattern::All)]).unwrap()
+}
+
+fn prohibition_profile() -> Profile {
+    Profile::new(Vec::new()).unwrap()
+}
+
 fn allowance_test() {
-    Profile::new(vec![
-        Operation::NetworkOutbound(AddressPattern::All)
-    ]).unwrap().activate().unwrap();
+    ChildSandbox::new(allowance_profile()).activate().unwrap();
     drop(TcpStream::connect(ADDRESS).unwrap())
 }
 
 fn prohibition_test() {
-    Profile::new(Vec::new()).unwrap().activate().unwrap();
+    ChildSandbox::new(prohibition_profile()).activate().unwrap();
     drop(TcpStream::connect(ADDRESS).unwrap())
 }
 
@@ -35,14 +41,18 @@ pub fn main() {
     let listener = TcpListener::bind(ADDRESS).unwrap();
     let _acceptor = listener.listen();
 
-    let allowance_status = Command::new(env::current_exe().unwrap()).arg("allowance_test")
-                                                                    .status()
-                                                                    .unwrap();
+    let allowance_status =
+        Sandbox::new(allowance_profile()).start(Command::me().unwrap().arg("allowance_test"))
+                                         .unwrap()
+                                         .wait()
+                                         .unwrap();
     assert!(allowance_status.success());
 
-    let prohibition_status = Command::new(env::current_exe().unwrap()).arg("prohibition_test")
-                                                                      .status()
-                                                                      .unwrap();
+    let prohibition_status =
+        Sandbox::new(prohibition_profile()).start(Command::me().unwrap().arg("prohibition_test"))
+                                           .unwrap()
+                                           .wait()
+                                           .unwrap();
     assert!(!prohibition_status.success());
 }
 

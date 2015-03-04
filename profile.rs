@@ -8,6 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+//! Sandbox profiles—lists of permitted operations.
+
 use platform;
 
 /// A sandbox profile, which specifies the set of operations that this process is allowed to
@@ -75,6 +77,7 @@ use platform;
 /// behavior is undefined if they do. For example, you may not allow metadata reads of the subpath
 /// rooted at `/dev` while allowing full reads of `/dev/null`; you must instead allow full reads of
 /// `/dev` or make the profile more restrictive.
+#[derive(Clone, Debug)]
 pub struct Profile {
     allowed_operations: Vec<Operation>,
 }
@@ -166,12 +169,5 @@ pub trait OperationSupport {
     /// Returns an `OperationSupportLevel` describing how well this operation can be allowed on
     /// this platform.
     fn support(&self) -> OperationSupportLevel;
-}
-
-/// Allows a sandbox to be activated.
-pub trait Activate {
-    /// Enters the sandbox, activating its restrictions forevermore for this process and
-    /// subprocesses. Be sure to check the return code!
-    fn activate(&self) -> Result<(),()>;
 }
 

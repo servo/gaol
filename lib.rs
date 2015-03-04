@@ -17,12 +17,13 @@ extern crate log;
 extern crate libc;
 
 pub mod profile;
+pub mod sandbox;
 
 pub mod platform {
     #[cfg(target_os="linux")]
     pub use platform::linux::Operation;
     #[cfg(target_os="macos")]
-    pub use platform::macos::Operation;
+    pub use platform::macos::{ChildSandbox, Operation, Sandbox};
 
     #[cfg(target_os="linux")]
     pub mod linux;

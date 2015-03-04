@@ -10,12 +10,13 @@
 
 //! Sandboxing on Mac OS X via Seatbelt (`sandboxd`).
 
-use profile::{self, Activate, AddressPattern, OperationSupport, OperationSupportLevel};
-use profile::{PathPattern, Profile};
+use profile::{self, AddressPattern, OperationSupport, OperationSupportLevel, PathPattern, Profile};
+use sandbox::{ChildSandboxMethods, Command, SandboxMethods};
 
 use libc::{c_char, c_int};
 use std::ffi::{AsOsStr, CString};
-use std::old_io::MemWriter;
+use std::old_io::{IoResult, MemWriter};
+use std::old_io::process::Process;
 use std::ptr;
 use std::str;
 
@@ -47,11 +48,45 @@ pub enum Operation {
     MachLookup(Vec<u8>),
 }
 
-impl Activate for Profile {
+pub struct Sandbox {
+    profile: Profile,
+}
+
+impl Sandbox {
+    pub fn new(profile: Profile) -> Sandbox {
+        Sandbox {
+            profile: profile,
+        }
+    }
+}
+
+impl SandboxMethods for Sandbox {
+    fn profile(&self) -> &Profile {
+        &self.profile
+    }
+
+    fn start(&self, command: &mut Command) -> IoResult<Process> {
+        command.env("GAOL_CHILD_PROCESS", "1").spawn()
+    }
+}
+
+pub struct ChildSandbox {
+    profile: Profile,
+}
+
+impl ChildSandbox {
+    pub fn new(profile: Profile) -> ChildSandbox {
+        ChildSandbox {
+            profile: profile,
+        }
+    }
+}
+
+impl ChildSandboxMethods for ChildSandbox {
     fn activate(&self) -> Result<(),()> {
         let mut sandbox_profile = MemWriter::new();
         sandbox_profile.write_all(SANDBOX_PROFILE_PROLOGUE).unwrap();
-        for operation in self.allowed_operations().iter() {
+        for operation in self.profile.allowed_operations().iter() {
             match *operation {
                 profile::Operation::FileReadAll(ref file_pattern) => {
                     sandbox_profile.write_all(b"(allow file-read* ").unwrap();
