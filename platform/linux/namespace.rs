@@ -11,79 +11,25 @@
 //! Sandboxing on Linux via namespaces.
 
 use platform::linux::seccomp;
-use platform::linux;
 use platform::unix::process::Process;
 use platform::unix;
 use profile::{Operation, PathPattern, Profile}; 
 use sandbox::Command;
 
-use libc::{self, c_char, c_int, c_ulong, c_void, gid_t, pid_t, uid_t};
+use libc::{self, c_char, c_int, c_ulong, c_void, pid_t};
 use std::env;
 use std::ffi::{AsOsStr, CString};
 use std::iter;
 use std::mem;
-use std::old_io::{File, FilePermission, FileStat, FileType, IoError, IoResult};
+use std::old_io::{File, FilePermission, FileStat, FileType, IoResult};
 use std::old_io::fs;
 use std::ptr;
 
 /// Creates a namespace and sets up a chroot jail.
 pub fn activate(profile: &Profile) -> Result<(),c_int> {
-    match try!(Namespace::new()).init() {
-        Ok(()) => {}
-        Err(_) => return Err(1),
-    }
-
-    //try!(switch_to_unprivileged_user());
-
     let jail = try!(ChrootJail::new(profile));
     try!(jail.enter());
     drop_capabilities()
-}
-
-struct Namespace {
-    parent_uid: uid_t,
-    parent_gid: gid_t,
-}
-
-impl Namespace {
-    fn new() -> Result<Namespace,c_int> {
-        let parent_uid: uid_t =
-            env::var("GAOL_PARENT_UID").unwrap().to_str().unwrap().parse().unwrap();
-        let parent_gid: gid_t =
-            env::var("GAOL_PARENT_GID").unwrap().to_str().unwrap().parse().unwrap();
-
-        // If we got here, we're in the child.
-        Ok(Namespace {
-            parent_uid: parent_uid,
-            parent_gid: parent_gid,
-        })
-    }
-
-    fn init(&self) -> Result<(),IoError> {
-        // See http://crbug.com/457362 for more information on this.
-        /*try!(try!(File::create(&Path::new("/proc/self/setgroups"))).write_all(b"deny"));
-
-        try!(try!(File::create(&Path::new("/proc/self/gid_map"))).write_all(
-                format!("0 {} 1", self.parent_gid).as_bytes()));
-        try!(File::create(&Path::new("/proc/self/uid_map"))).write_all(
-            format!("0 {} 1", self.parent_uid).as_bytes())*/
-        Ok(())
-    }
-}
-
-fn switch_to_unprivileged_user() -> Result<(),c_int> {
-    unsafe {
-        let result = setresgid(1, 1, 1);
-        if result != 0 {
-            return Err(result)
-        }
-        let result = setresuid(1, 1, 1);
-        if result == 0 {
-            Ok(())
-        } else {
-            Err(result)
-        }
-    }
 }
 
 struct ChrootJail {
@@ -249,9 +195,6 @@ pub fn start(profile: &Profile, command: &mut Command) -> IoResult<Process> {
         unshare_flags |= CLONE_NEWNET
     }
 
-    command.env("GAOL_PARENT_UID", format!("{}", parent_uid).as_slice())
-           .env("GAOL_PARENT_GID", format!("{}", parent_gid).as_slice());
-
     // Create a pipe so we can communicate the PID of our grandchild back.
     let mut pipe_fds = [0, 0];
     unsafe {
@@ -264,9 +207,8 @@ pub fn start(profile: &Profile, command: &mut Command) -> IoResult<Process> {
             0 => {
                 libc::close(pipe_fds[0]);
 
-                if linux::process::sys_unshare(CLONE_NEWUSER | CLONE_NEWPID).is_err() {
-                    abort()
-                }
+                // Enter the main user and PID namespaces.
+                assert!(unshare(CLONE_NEWUSER | CLONE_NEWPID) == 0);
 
                 // See http://crbug.com/457362 for more information on this.
                 try!(try!(File::create(&Path::new("/proc/self/setgroups"))).write_all(b"deny"));
@@ -279,9 +221,9 @@ pub fn start(profile: &Profile, command: &mut Command) -> IoResult<Process> {
                 // Fork again, to enter the PID namespace.
                 match fork() {
                     0 => {
-                        if linux::process::sys_unshare(unshare_flags).is_err() {
-                            abort()
-                        }
+                        // Enter the auxiliary namespaces.
+                        assert!(unshare(unshare_flags) == 0);
+
                         // Go ahead and start the command.
                         drop(unix::process::exec(command));
                         abort()
@@ -358,8 +300,6 @@ type const_cap_user_data_t = *const __user_cap_data_struct;
 const _LINUX_CAPABILITY_VERSION_3: u32 = 0x20080522;
 const _LINUX_CAPABILITY_U32S_3: u32 = 2;
 
-const SIGCHLD: c_int = 17;
-
 const PR_SET_CHILD_SUBREAPER: c_int = 36;
 
 extern {
@@ -374,7 +314,6 @@ extern {
              mountflags: c_ulong,
              data: *const c_void)
              -> c_int;
-    fn setresgid(rgid: gid_t, egid: gid_t, sgid: gid_t) -> c_int;
-    fn setresuid(ruid: uid_t, euid: uid_t, suid: uid_t) -> c_int;
+    fn unshare(flags: c_int) -> c_int;
 }
 

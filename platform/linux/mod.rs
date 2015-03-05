@@ -17,7 +17,6 @@ use std::old_io::IoResult;
 
 pub mod misc;
 pub mod namespace;
-pub mod process;
 pub mod seccomp;
 
 #[allow(missing_copy_implementations)]
