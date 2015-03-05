@@ -16,7 +16,7 @@ use platform::unix;
 use profile::{Operation, PathPattern, Profile}; 
 use sandbox::Command;
 
-use libc::{self, c_char, c_int, c_ulong, c_void, pid_t};
+use libc::{self, c_char, c_int, c_ulong, c_void, gid_t, pid_t, uid_t};
 use std::env;
 use std::ffi::{AsOsStr, CString};
 use std::iter;
@@ -32,11 +32,13 @@ pub fn activate(profile: &Profile) -> Result<(),c_int> {
     drop_capabilities()
 }
 
+/// A `chroot` jail with a restricted view of the filesystem inside it.
 struct ChrootJail {
     directory: Path,
 }
 
 impl ChrootJail {
+    /// Creates a new `chroot` jail.
     fn new(profile: &Profile) -> Result<ChrootJail,c_int> {
         let prefix = CString::from_slice(b"/tmp/gaol.XXXXXX");
         let mut prefix: Vec<u8> = prefix.as_bytes_with_nul().iter().map(|x| *x).collect();
@@ -77,6 +79,7 @@ impl ChrootJail {
         Ok(jail)
     }
 
+    /// Enters the `chroot` jail.
     fn enter(&self) -> Result<(),c_int> {
         let directory = CString::from_slice(self.directory
                                                 .as_os_str()
@@ -96,6 +99,7 @@ impl ChrootJail {
         }
     }
 
+    /// Bind mounts a path into our chroot jail.
     fn bind_mount(&self, source_path: &Path) -> Result<(),c_int> {
         // Create all intermediate directories.
         let mut destination_path = self.directory.clone();
@@ -158,6 +162,8 @@ impl ChrootJail {
     }
 }
 
+/// Removes fake-superuser capabilities. This removes our ability to mess with the filesystem view
+/// we've set up.
 fn drop_capabilities() -> Result<(),c_int> {
     let capability_data: Vec<_> = iter::repeat(__user_cap_data_struct {
         effective: 0,
@@ -177,15 +183,34 @@ fn drop_capabilities() -> Result<(),c_int> {
     }
 }
 
+/// Sets up the user and PID namespaces.
+unsafe fn prepare_user_and_pid_namespaces(parent_uid: uid_t, parent_gid: gid_t) -> IoResult<()> {
+    // Enter the main user and PID namespaces.
+    assert!(unshare(CLONE_NEWUSER | CLONE_NEWPID) == 0);
+
+    // See http://crbug.com/457362 for more information on this.
+    try!(try!(File::create(&Path::new("/proc/self/setgroups"))).write_all(b"deny"));
+
+    let gid_contents = format!("0 {} 1", parent_gid);
+    try!(try!(File::create(&Path::new("/proc/self/gid_map"))).write_all(gid_contents.as_bytes()));
+    let uid_contents = format!("0 {} 1", parent_uid);
+    try!(try!(File::create(&Path::new("/proc/self/uid_map"))).write_all(uid_contents.as_bytes()));
+    Ok(())
+}
+
 /// Spawns a child process in a new namespace.
+///
+/// This function is quite tricky. Hic sunt dracones!
 pub fn start(profile: &Profile, command: &mut Command) -> IoResult<Process> {
+    // Store our root namespace UID and GID because they're going to change once we enter a user
+    // namespace.
     let (parent_uid, parent_gid) = unsafe {
         (libc::getuid(), libc::getgid())
     };
 
+    // Always create an IPC namespace, a mount namespace, and a UTS namespace. Additionally, if we
+    // aren't allowing network operations, create a network namespace.
     let mut unshare_flags = CLONE_NEWIPC | CLONE_NEWNS | CLONE_NEWUTS;
-
-    // If we don't allow network operations, create a network namespace.
     if !profile.allowed_operations().iter().any(|operation| {
         match *operation {
             Operation::NetworkOutbound(_) => true,
@@ -195,62 +220,56 @@ pub fn start(profile: &Profile, command: &mut Command) -> IoResult<Process> {
         unshare_flags |= CLONE_NEWNET
     }
 
-    // Create a pipe so we can communicate the PID of our grandchild back.
-    let mut pipe_fds = [0, 0];
     unsafe {
+        // Create a pipe so we can communicate the PID of our grandchild back.
+        let mut pipe_fds = [0, 0];
         assert!(libc::pipe(&mut pipe_fds[0]) == 0);
 
+        // Set this `prctl` flag so that we can wait on our grandchild. (Otherwise it'll be
+        // reparented to init.)
         assert!(seccomp::prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) == 0);
 
         // Fork so that we can unshare without removing our ability to create threads.
-        match fork() {
-            0 => {
-                libc::close(pipe_fds[0]);
+        if fork() == 0 {
+            // Close the reading end of the pipe.
+            libc::close(pipe_fds[0]);
 
-                // Enter the main user and PID namespaces.
-                assert!(unshare(CLONE_NEWUSER | CLONE_NEWPID) == 0);
+            // Set up our user and PID namespaces. The PID namespace won't actually come into
+            // effect until the next fork(), because PIDs are immutable.
+            prepare_user_and_pid_namespaces(parent_uid, parent_gid).unwrap();
 
-                // See http://crbug.com/457362 for more information on this.
-                try!(try!(File::create(&Path::new("/proc/self/setgroups"))).write_all(b"deny"));
+            // Fork again, to enter the PID namespace.
+            match fork() {
+                0 => {
+                    // Enter the auxiliary namespaces.
+                    assert!(unshare(unshare_flags) == 0);
 
-                try!(try!(File::create(&Path::new("/proc/self/gid_map"))).write_all(
-                        format!("0 {} 1", parent_gid).as_bytes()));
-                try!(try!(File::create(&Path::new("/proc/self/uid_map"))).write_all(
-                    format!("0 {} 1", parent_uid).as_bytes()));
-
-                // Fork again, to enter the PID namespace.
-                match fork() {
-                    0 => {
-                        // Enter the auxiliary namespaces.
-                        assert!(unshare(unshare_flags) == 0);
-
-                        // Go ahead and start the command.
-                        drop(unix::process::exec(command));
-                        abort()
-                    }
-                    grandchild_pid => {
-                        assert!(libc::write(pipe_fds[1],
-                                            &grandchild_pid as *const pid_t as *const c_void,
-                                            mem::size_of::<pid_t>() as u64) ==
-                                                mem::size_of::<pid_t>() as i64);
-                        libc::exit(0);
-                    }
+                    // Go ahead and start the command.
+                    drop(unix::process::exec(command));
+                    abort()
+                }
+                grandchild_pid => {
+                    // Send the PID of our child up to our parent and exit.
+                    assert!(libc::write(pipe_fds[1],
+                                        &grandchild_pid as *const pid_t as *const c_void,
+                                        mem::size_of::<pid_t>() as u64) ==
+                                            mem::size_of::<pid_t>() as i64);
+                    libc::exit(0);
                 }
             }
-            _ => {
-                libc::close(pipe_fds[1]);
-
-                // Retrieve our grandchild's PID.
-                let mut grandchild_pid: pid_t = 0;
-                assert!(libc::read(pipe_fds[0],
-                                   &mut grandchild_pid as *mut i32 as *mut c_void,
-                                   mem::size_of::<pid_t>() as u64) ==
-                                    mem::size_of::<pid_t>() as i64);
-                Ok(Process {
-                    pid: grandchild_pid,
-                })
-            }
         }
+
+        // Grandparent execution continues here. First, close the writing end of the pipe.
+        libc::close(pipe_fds[1]);
+
+        // Retrieve our grandchild's PID.
+        let mut grandchild_pid: pid_t = 0;
+        assert!(libc::read(pipe_fds[0],
+                           &mut grandchild_pid as *mut i32 as *mut c_void,
+                           mem::size_of::<pid_t>() as u64) == mem::size_of::<pid_t>() as i64);
+        Ok(Process {
+            pid: grandchild_pid,
+        })
     }
 }
 
