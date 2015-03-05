@@ -10,13 +10,13 @@
 
 //! Sandboxing on Mac OS X via Seatbelt (`sandboxd`).
 
+use platform::unix::process::Process;
 use profile::{self, AddressPattern, OperationSupport, OperationSupportLevel, PathPattern, Profile};
 use sandbox::{ChildSandboxMethods, Command, SandboxMethods};
 
 use libc::{c_char, c_int};
 use std::ffi::{AsOsStr, CString};
 use std::old_io::{IoResult, MemWriter};
-use std::old_io::process::Process;
 use std::ptr;
 use std::str;
 

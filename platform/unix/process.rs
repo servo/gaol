@@ -1,0 +1,112 @@
+// Copyright 2015 The Rust Project Developers. See the COPYRIGHT
+// file at the top-level directory of this distribution and at
+// http://rust-lang.org/COPYRIGHT.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+//! Child process management on POSIX systems.
+
+use sandbox::Command;
+
+use libc::{c_char, c_int, pid_t};
+use std::ffi::CString;
+use std::old_io::{IoError, IoResult};
+use std::old_io::process::ProcessExit;
+use std::old_path::BytesContainer;
+use std::ptr;
+
+pub fn exec(command: &Command) -> IoError {
+    let mut args: Vec<_> = command.args.iter().map(|arg| arg.as_ptr()).collect();
+    args.push(ptr::null());
+
+    let env: Vec<_> =
+        command.env.iter().map(|(key, value)| {
+            format!("{}={}", key.container_as_str().unwrap(), value.container_as_str().unwrap())
+        }).collect();
+    let env: Vec<_> = env.iter().map(|entry| CString::from_slice(entry.as_bytes())).collect();
+    let mut env: Vec<_> = env.iter().map(|entry| entry.as_ptr()).collect();
+    env.push(ptr::null());
+
+    unsafe {
+        execve(command.module_path.as_ptr(), args.as_ptr(), env.as_ptr());
+    }
+
+    IoError::last_error()
+}
+
+pub fn spawn(command: &Command) -> IoResult<Process> {
+    unsafe {
+        match fork() {
+            0 => {
+                drop(exec(command));
+                panic!()
+            }
+            pid => {
+                Ok(Process {
+                    pid: pid,
+                })
+            }
+        }
+    }
+}
+
+#[allow(missing_copy_implementations)]
+pub struct Process {
+    pid: pid_t,
+}
+
+impl Process {
+    pub fn fork() -> Option<Process> {
+        let pid = unsafe {
+            fork()
+        };
+        if pid == 0 {
+            None
+        } else {
+            Some(Process {
+                pid: pid,
+            })
+        }
+    }
+
+    pub fn wait(&self) -> IoResult<ProcessExit> {
+        let mut stat = 0;
+        let pid = unsafe {
+            waitpid(self.pid, &mut stat, 0)
+        };
+        if pid < 0 {
+            Err(IoError::last_error())
+        } else if WIFEXITED(stat) {
+            Ok(ProcessExit::ExitStatus(WEXITSTATUS(stat) as isize))
+        } else {
+            Ok(ProcessExit::ExitSignal(WTERMSIG(stat) as isize))
+        }
+    }
+}
+
+#[allow(non_snake_case)]
+fn WIFEXITED(stat: c_int) -> bool {
+    (stat & 0o177) == 0
+}
+
+#[allow(non_snake_case)]
+fn WEXITSTATUS(stat: c_int) -> u8 {
+    (stat >> 8) as u8
+}
+
+#[allow(non_snake_case)]
+fn WTERMSIG(stat: c_int) -> u8 {
+    (stat & 0o177) as u8
+}
+
+extern {
+    fn fork() -> pid_t;
+    fn execve(path: *const c_char, argv: *const *const c_char, envp: *const *const c_char)
+              -> c_int;
+    fn waitpid(pid: pid_t, stat_loc: *mut c_int, options: c_int) -> pid_t;
+}
+

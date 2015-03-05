@@ -10,13 +10,13 @@
 
 //! Creation and destruction of sandboxes.
 
+use platform::process::{self, Process};
 use profile::Profile;
 
 use std::collections::HashMap;
 use std::env;
 use std::ffi::CString;
 use std::old_io::IoResult;
-use std::old_io::process::{self, Process};
 use std::old_path::BytesContainer;
 
 pub use platform::{ChildSandbox, Sandbox};
@@ -41,9 +41,12 @@ pub trait ChildSandboxMethods {
 }
 
 pub struct Command {
-    module_path: CString,
-    args: Vec<CString>,
-    env: HashMap<CString,CString>,
+    /// A path to the executable.
+    pub module_path: CString,
+    /// The arguments to pass.
+    pub args: Vec<CString>,
+    /// The environment of the process.
+    pub env: HashMap<CString,CString>,
 }
 
 impl Command {
@@ -85,10 +88,7 @@ impl Command {
 
     /// Executes the command as a child process, which is returned.
     pub fn spawn(&self) -> IoResult<Process> {
-        let env: Vec<_> = self.env.iter().collect();
-        process::Command::new(&self.module_path).args(self.args.as_slice())
-                                                .env_set_all(env.as_slice())
-                                                .spawn()
+        process::spawn(self)
     }
 }
 
