@@ -9,10 +9,15 @@
 // except according to those terms.
 
 use platform::linux::seccomp::Filter;
-use profile::{self, Activate, AddressPattern, OperationSupport, OperationSupportLevel, Profile};
+use platform::unix::process::Process;
+use profile::{self, AddressPattern, OperationSupport, OperationSupportLevel, Profile};
+use sandbox::{ChildSandboxMethods, Command, SandboxMethods};
+
+use std::old_io::IoResult;
 
 pub mod misc;
 pub mod namespace;
+pub mod process;
 pub mod seccomp;
 
 #[allow(missing_copy_implementations)]
@@ -37,15 +42,49 @@ impl OperationSupport for profile::Operation {
     }
 }
 
-impl Activate for Profile {
+pub struct Sandbox {
+    profile: Profile,
+}
+
+impl Sandbox {
+    pub fn new(profile: Profile) -> Sandbox {
+        Sandbox {
+            profile: profile,
+        }
+    }
+}
+
+impl SandboxMethods for Sandbox {
+    fn profile(&self) -> &Profile {
+        &self.profile
+    }
+
+    fn start(&self, command: &mut Command) -> IoResult<Process> {
+        namespace::start(&self.profile, command)
+    }
+}
+
+pub struct ChildSandbox {
+    profile: Profile,
+}
+
+impl ChildSandbox {
+    pub fn new(profile: Profile) -> ChildSandbox {
+        ChildSandbox {
+            profile: profile,
+        }
+    }
+}
+
+impl ChildSandboxMethods for ChildSandbox {
     fn activate(&self) -> Result<(),()> {
-        if namespace::activate(self).is_err() {
+        if namespace::activate(&self.profile).is_err() {
             return Err(())
         }
         if misc::activate().is_err() {
             return Err(())
         }
-        match Filter::new(self).activate() {
+        match Filter::new(&self.profile).activate() {
             Ok(_) => Ok(()),
             Err(_) => Err(()),
         }

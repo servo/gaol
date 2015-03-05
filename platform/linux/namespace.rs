@@ -10,18 +10,24 @@
 
 //! Sandboxing on Linux via namespaces.
 
+use platform::linux;
+use platform::unix::process::Process;
+use platform::unix;
 use profile::{Operation, PathPattern, Profile}; 
+use sandbox::Command;
+
 use libc::{self, c_char, c_int, c_ulong, c_void, gid_t, pid_t, uid_t};
 use std::env;
 use std::ffi::{AsOsStr, CString};
 use std::iter;
-use std::old_io::{File, FilePermission, FileStat, FileType, IoError};
+use std::mem;
+use std::old_io::{File, FilePermission, FileStat, FileType, IoError, IoResult};
 use std::old_io::fs;
 use std::ptr;
 
 /// Creates a namespace and sets up a chroot jail.
 pub fn activate(profile: &Profile) -> Result<(),c_int> {
-    match try!(Namespace::new(profile)).init() {
+    match try!(Namespace::new()).init() {
         Ok(()) => {}
         Err(_) => return Err(1),
     }
@@ -39,43 +45,11 @@ struct Namespace {
 }
 
 impl Namespace {
-    fn new(profile: &Profile) -> Result<Namespace,c_int> {
-        let (parent_uid, parent_gid) = unsafe {
-            (libc::getuid(), libc::getgid())
-        };
-
-        let mut flags = CLONE_NEWUSER | CLONE_NEWIPC | CLONE_NEWNS | CLONE_NEWUTS | CLONE_NEWPID;
-
-        // If we don't allow network operations, create a network namespace.
-        if !profile.allowed_operations().iter().any(|operation| {
-            match *operation {
-                Operation::NetworkOutbound(_) => true,
-                _ => false,
-            }
-        }) {
-            flags |= CLONE_NEWNET
-        }
-
-        unsafe {
-            let result = unshare(flags);
-            if result != 0 {
-                return Err(result)
-            }
-
-            let pid = fork();
-            let mut stat_loc = 0;
-            if pid != 0 {
-                // If we're the parent, just wait on our child and exit.
-                if waitpid(pid, &mut stat_loc, 0) == -1 {
-                    libc::exit(1)
-                }
-                if !WIFSIGNALED(stat_loc) {
-                    libc::exit(WEXITSTATUS(stat_loc))
-                } else {
-                    libc::exit(255)
-                }
-            }
-        }
+    fn new() -> Result<Namespace,c_int> {
+        let parent_uid: uid_t =
+            env::var("GAOL_PARENT_UID").unwrap().to_str().unwrap().parse().unwrap();
+        let parent_gid: gid_t =
+            env::var("GAOL_PARENT_GID").unwrap().to_str().unwrap().parse().unwrap();
 
         // If we got here, we're in the child.
         Ok(Namespace {
@@ -255,14 +229,75 @@ fn drop_capabilities() -> Result<(),c_int> {
     }
 }
 
-#[allow(non_snake_case)]
-fn WEXITSTATUS(status: c_int) -> c_int {
-    (status >> 8) & 0xff
-}
+/// Spawns a child process in a new namespace.
+pub fn start(profile: &Profile, command: &mut Command) -> IoResult<Process> {
+    let (parent_uid, parent_gid) = unsafe {
+        (libc::getuid(), libc::getgid())
+    };
 
-#[allow(non_snake_case)]
-fn WIFSIGNALED(status: c_int) -> bool {
-    ((((status & 0x7f) + 1) as i8) >> 1) > 0
+    let mut unshare_flags = CLONE_NEWIPC | CLONE_NEWNS | CLONE_NEWUTS;
+
+    // If we don't allow network operations, create a network namespace.
+    if !profile.allowed_operations().iter().any(|operation| {
+        match *operation {
+            Operation::NetworkOutbound(_) => true,
+            _ => false,
+        }
+    }) {
+        unshare_flags |= CLONE_NEWNET
+    }
+
+    command.env("GAOL_PARENT_UID", format!("{}", parent_uid).as_slice())
+           .env("GAOL_PARENT_GID", format!("{}", parent_gid).as_slice());
+
+    // Create a pipe so we can communicate the PID of our grandchild back.
+    let mut pipe_fds = [0, 0];
+    unsafe {
+        assert!(libc::pipe(&mut pipe_fds[0]) == 0);
+
+        // Fork so that we can unshare without removing our ability to create threads.
+        match fork() {
+            0 => {
+                libc::close(pipe_fds[0]);
+
+                /*if linux::process::sys_unshare(CLONE_NEWUSER | CLONE_NEWPID).is_err() {
+                    abort()
+                }*/
+
+                // Fork again, to enter the PID namespace.
+                match fork() {
+                    0 => {
+                        /*if linux::process::sys_unshare(unshare_flags).is_err() {
+                            abort()
+                        }*/
+                        // Go ahead and start the command.
+                        drop(unix::process::exec(command));
+                        abort()
+                    }
+                    grandchild_pid => {
+                        assert!(libc::write(pipe_fds[1],
+                                            &grandchild_pid as *const pid_t as *const c_void,
+                                            mem::size_of::<pid_t>() as u64) ==
+                                                mem::size_of::<pid_t> as i64);
+                        libc::exit(0);
+                    }
+                }
+            }
+            _ => {
+                libc::close(pipe_fds[1]);
+
+                // Retrieve our grandchild's PID.
+                let mut grandchild_pid: pid_t = 0;
+                assert!(libc::read(pipe_fds[0],
+                                   &mut grandchild_pid as *mut i32 as *mut c_void,
+                                   mem::size_of::<pid_t>() as u64) ==
+                                    mem::size_of::<pid_t>() as i64);
+                Ok(Process {
+                    pid: grandchild_pid,
+                })
+            }
+        }
+    }
 }
 
 pub const CLONE_VM: c_int = 0x0000_0100;
@@ -311,7 +346,10 @@ type const_cap_user_data_t = *const __user_cap_data_struct;
 const _LINUX_CAPABILITY_VERSION_3: u32 = 0x20080522;
 const _LINUX_CAPABILITY_U32S_3: u32 = 2;
 
+const SIGCHLD: c_int = 17;
+
 extern {
+    fn abort() -> !;
     fn capset(hdrp: cap_user_header_t, datap: const_cap_user_data_t) -> c_int;
     fn chroot(path: *const c_char) -> c_int;
     fn fork() -> pid_t;
@@ -324,7 +362,5 @@ extern {
              -> c_int;
     fn setresgid(rgid: gid_t, egid: gid_t, sgid: gid_t) -> c_int;
     fn setresuid(ruid: uid_t, euid: uid_t, suid: uid_t) -> c_int;
-    fn unshare(flags: c_int) -> c_int;
-    fn waitpid(pid: pid_t, status: *mut c_int, options: c_int) -> pid_t;
 }
 

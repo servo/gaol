@@ -21,7 +21,7 @@ pub mod sandbox;
 
 pub mod platform {
     #[cfg(target_os="linux")]
-    pub use platform::linux::Operation;
+    pub use platform::linux::{ChildSandbox, Operation, Sandbox};
     #[cfg(target_os="macos")]
     pub use platform::macos::{ChildSandbox, Operation, Sandbox};
     #[cfg(any(target_os="linux", target_os="macos"))]

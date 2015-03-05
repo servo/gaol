@@ -56,23 +56,10 @@ pub fn spawn(command: &Command) -> IoResult<Process> {
 
 #[allow(missing_copy_implementations)]
 pub struct Process {
-    pid: pid_t,
+    pub pid: pid_t,
 }
 
 impl Process {
-    pub fn fork() -> Option<Process> {
-        let pid = unsafe {
-            fork()
-        };
-        if pid == 0 {
-            None
-        } else {
-            Some(Process {
-                pid: pid,
-            })
-        }
-    }
-
     pub fn wait(&self) -> IoResult<ProcessExit> {
         let mut stat = 0;
         let pid = unsafe {
