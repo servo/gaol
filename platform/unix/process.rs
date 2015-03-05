@@ -65,12 +65,19 @@ pub struct Process {
 impl Process {
     pub fn wait(&self) -> IoResult<ProcessExit> {
         let mut stat = 0;
-        let pid = unsafe {
-            waitpid(self.pid, &mut stat, 0)
-        };
-        if pid < 0 {
-            Err(IoError::last_error())
-        } else if WIFEXITED(stat) {
+        loop {
+            let pid = unsafe {
+                waitpid(-1, &mut stat, 0)
+            };
+            if pid < 0 {
+                return Err(IoError::last_error())
+            }
+            if pid == self.pid {
+                break
+            }
+        }
+
+        if WIFEXITED(stat) {
             Ok(ProcessExit::ExitStatus(WEXITSTATUS(stat) as isize))
         } else {
             Ok(ProcessExit::ExitSignal(WTERMSIG(stat) as isize))

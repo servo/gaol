@@ -10,6 +10,7 @@
 
 //! Sandboxing on Linux via namespaces.
 
+use platform::linux::seccomp;
 use platform::linux;
 use platform::unix::process::Process;
 use platform::unix;
@@ -32,7 +33,7 @@ pub fn activate(profile: &Profile) -> Result<(),c_int> {
         Err(_) => return Err(1),
     }
 
-    try!(switch_to_unprivileged_user());
+    //try!(switch_to_unprivileged_user());
 
     let jail = try!(ChrootJail::new(profile));
     try!(jail.enter());
@@ -60,12 +61,13 @@ impl Namespace {
 
     fn init(&self) -> Result<(),IoError> {
         // See http://crbug.com/457362 for more information on this.
-        try!(try!(File::create(&Path::new("/proc/self/setgroups"))).write_all(b"deny"));
+        /*try!(try!(File::create(&Path::new("/proc/self/setgroups"))).write_all(b"deny"));
 
         try!(try!(File::create(&Path::new("/proc/self/gid_map"))).write_all(
-                format!("1 {} 1", self.parent_gid).as_bytes()));
+                format!("0 {} 1", self.parent_gid).as_bytes()));
         try!(File::create(&Path::new("/proc/self/uid_map"))).write_all(
-            format!("1 {} 1", self.parent_uid).as_bytes())
+            format!("0 {} 1", self.parent_uid).as_bytes())*/
+        Ok(())
     }
 }
 
@@ -255,21 +257,31 @@ pub fn start(profile: &Profile, command: &mut Command) -> IoResult<Process> {
     unsafe {
         assert!(libc::pipe(&mut pipe_fds[0]) == 0);
 
+        assert!(seccomp::prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) == 0);
+
         // Fork so that we can unshare without removing our ability to create threads.
         match fork() {
             0 => {
                 libc::close(pipe_fds[0]);
 
-                /*if linux::process::sys_unshare(CLONE_NEWUSER | CLONE_NEWPID).is_err() {
+                if linux::process::sys_unshare(CLONE_NEWUSER | CLONE_NEWPID).is_err() {
                     abort()
-                }*/
+                }
+
+                // See http://crbug.com/457362 for more information on this.
+                try!(try!(File::create(&Path::new("/proc/self/setgroups"))).write_all(b"deny"));
+
+                try!(try!(File::create(&Path::new("/proc/self/gid_map"))).write_all(
+                        format!("0 {} 1", parent_gid).as_bytes()));
+                try!(try!(File::create(&Path::new("/proc/self/uid_map"))).write_all(
+                    format!("0 {} 1", parent_uid).as_bytes()));
 
                 // Fork again, to enter the PID namespace.
                 match fork() {
                     0 => {
-                        /*if linux::process::sys_unshare(unshare_flags).is_err() {
+                        if linux::process::sys_unshare(unshare_flags).is_err() {
                             abort()
-                        }*/
+                        }
                         // Go ahead and start the command.
                         drop(unix::process::exec(command));
                         abort()
@@ -278,7 +290,7 @@ pub fn start(profile: &Profile, command: &mut Command) -> IoResult<Process> {
                         assert!(libc::write(pipe_fds[1],
                                             &grandchild_pid as *const pid_t as *const c_void,
                                             mem::size_of::<pid_t>() as u64) ==
-                                                mem::size_of::<pid_t> as i64);
+                                                mem::size_of::<pid_t>() as i64);
                         libc::exit(0);
                     }
                 }
@@ -347,6 +359,8 @@ const _LINUX_CAPABILITY_VERSION_3: u32 = 0x20080522;
 const _LINUX_CAPABILITY_U32S_3: u32 = 2;
 
 const SIGCHLD: c_int = 17;
+
+const PR_SET_CHILD_SUBREAPER: c_int = 36;
 
 extern {
     fn abort() -> !;

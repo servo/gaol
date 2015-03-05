@@ -387,6 +387,7 @@ struct sock_fprog {
 }
 
 extern {
-    fn prctl(option: c_int, arg2: c_ulong, arg3: c_ulong, arg4: c_ulong, arg5: c_ulong) -> c_int;
+    pub fn prctl(option: c_int, arg2: c_ulong, arg3: c_ulong, arg4: c_ulong, arg5: c_ulong)
+                 -> c_int;
 }
 

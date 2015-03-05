@@ -18,28 +18,28 @@ use std::rand::{self, Rng};
 // A conservative overapproximation of `PATH_MAX` on all platforms.
 const PATH_MAX: usize = 4096;
 
-fn allowance_profile(path: &Path) -> Profile {
+fn allowance_profile(path: &Path) -> Result<Profile,()> {
     Profile::new(vec![
         Operation::FileReadMetadata(PathPattern::Literal(path.clone())),
-    ]).unwrap()
+    ])
 }
 
-fn prohibition_profile() -> Profile {
+fn prohibition_profile() -> Result<Profile,()> {
     Profile::new(vec![
         Operation::FileReadMetadata(PathPattern::Subpath(Path::new("/bogus")))
-    ]).unwrap()
+    ])
 }
 
 fn allowance_test() {
     let path = Path::new(env::var("GAOL_TEMP_FILE").unwrap().to_str().unwrap());
-    if ChildSandbox::new(allowance_profile(&path)).activate().is_ok() {
+    if ChildSandbox::new(allowance_profile(&path).unwrap()).activate().is_ok() {
         drop(path.stat().unwrap())
     }
 }
 
 fn prohibition_test() {
     let path = Path::new(env::var("GAOL_TEMP_FILE").unwrap().to_str().unwrap());
-    ChildSandbox::new(prohibition_profile()).activate().unwrap();
+    ChildSandbox::new(prohibition_profile().unwrap()).activate().unwrap();
     drop(path.stat().unwrap())
 }
 
@@ -64,21 +64,28 @@ pub fn main() {
     temp_path.push(format!("gaoltest.{}", suffix));
     File::create(&temp_path).unwrap().write_str("super secret\n").unwrap();
 
-    let allowance_status = Sandbox::new(allowance_profile(
-            &temp_path)).start(&mut Command::me().unwrap()
-                                                 .arg("allowance_test")
-                                                 .env("GAOL_TEMP_FILE", temp_path.clone()))
-                        .unwrap()
-                        .wait()
-                        .unwrap();
-    assert!(allowance_status.success());
+    if let Ok(profile) = allowance_profile(&temp_path) {
+        let allowance_status =
+            Sandbox::new(profile).start(&mut Command::me().unwrap()
+                                                          .arg("allowance_test")
+                                                          .env("GAOL_TEMP_FILE",
+                                                               temp_path.clone()))
+                                 .unwrap()
+                                 .wait()
+                                 .unwrap();
+        assert!(allowance_status.success());
+    }
 
-    let prohibition_status = Sandbox::new(prohibition_profile()).start(
-        Command::me().unwrap().arg("prohibition_test").env("GAOL_TEMP_FILE", temp_path.clone()))
-                                                                .unwrap()
-                                                                .wait()
-                                                                .unwrap();
-    assert!(!prohibition_status.success());
+    if let Ok(profile) = prohibition_profile() {
+        let prohibition_status =
+            Sandbox::new(profile).start(Command::me().unwrap()
+                                                     .arg("prohibition_test")
+                                                     .env("GAOL_TEMP_FILE", temp_path.clone()))
+                                 .unwrap()
+                                 .wait()
+                                 .unwrap();
+        assert!(!prohibition_status.success());
+    }
 }
 
 extern {
