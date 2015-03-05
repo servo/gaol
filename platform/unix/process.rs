@@ -20,7 +20,10 @@ use std::old_path::BytesContainer;
 use std::ptr;
 
 pub fn exec(command: &Command) -> IoError {
-    let mut args: Vec<_> = command.args.iter().map(|arg| arg.as_ptr()).collect();
+    let mut args: Vec<_> = vec![command.module_path.as_ptr()];
+    for arg in command.args.iter() {
+        args.push(arg.as_ptr())
+    }
     args.push(ptr::null());
 
     let env: Vec<_> =
