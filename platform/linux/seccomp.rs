@@ -295,12 +295,15 @@ impl Filter {
 
         // Only allow the POSIX values for `madvise`.
         filter.if_syscall_is(NR_madvise, |filter| {
-            filter.if_arg2_is(MADV_NORMAL |
-                              MADV_RANDOM |
-                              MADV_SEQUENTIAL |
-                              MADV_WILLNEED |
-                              MADV_DONTNEED,
-                              |filter| filter.allow_this_syscall())
+            for mode in [
+                MADV_NORMAL,
+                MADV_RANDOM,
+                MADV_SEQUENTIAL,
+                MADV_WILLNEED,
+                MADV_DONTNEED
+            ].iter() {
+                filter.if_arg2_is(*mode, |filter| filter.allow_this_syscall())
+            }
         });
 
         filter.program.push_all(&FILTER_EPILOGUE);
