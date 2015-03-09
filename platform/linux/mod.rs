@@ -51,6 +51,15 @@ impl Sandbox {
             profile: profile,
         }
     }
+
+    #[cfg(dump_bpf_sockets)]
+    fn dump_filter(&self) {
+        let filter = Filter::new(&self.profile);
+        filter.dump();
+    }
+
+    #[cfg(not(dump_bpf_sockets))]
+    fn dump_filter(&self) {}
 }
 
 impl SandboxMethods for Sandbox {
@@ -59,6 +68,7 @@ impl SandboxMethods for Sandbox {
     }
 
     fn start(&self, command: &mut Command) -> IoResult<Process> {
+        self.dump_filter();
         namespace::start(&self.profile, command)
     }
 }

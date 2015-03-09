@@ -14,19 +14,25 @@
 //! the weaker of the two approaches, because BPF is limited, but it's useful for reducing kernel
 //! attack surface area and implementing coarse-grained policies.
 
-#![allow(non_upper_case_globals)]
+#![allow(non_upper_case_globals, unused_imports)]
 
 use platform::linux::namespace::{CLONE_CHILD_CLEARTID, CLONE_FILES, CLONE_FS};
 use platform::linux::namespace::{CLONE_PARENT_SETTID, CLONE_SETTLS, CLONE_SIGHAND, CLONE_SYSVSEM};
 use platform::linux::namespace::{CLONE_THREAD, CLONE_VM};
 use profile::{Operation, Profile};
 
-use libc::{AF_INET, AF_INET6, AF_UNIX, O_NONBLOCK, O_RDONLY, c_int, c_ulong, c_ushort};
+use libc::{self, AF_INET, AF_INET6, AF_UNIX, O_NONBLOCK, O_RDONLY, c_char, c_int, c_ulong};
+use libc::{c_ushort, c_void};
+use std::ffi::CString;
+use std::mem;
 
+/// The architecture number for x86.
 #[cfg(target_arch="x86")]
 const ARCH_NR: u32 = AUDIT_ARCH_X86;
+/// The architecture number for x86-64.
 #[cfg(target_arch="x86_64")]
 const ARCH_NR: u32 = AUDIT_ARCH_X86_64;
+/// The architecture number for ARM.
 #[cfg(target_arch="arm")]
 const ARCH_NR: u32 = AUDIT_ARCH_ARM;
 
@@ -60,6 +66,12 @@ const FIONREAD: c_int = 0x541b;
 
 const NETLINK_ROUTE: c_int = 0;
 
+const MADV_NORMAL: u32 = 0;
+const MADV_RANDOM: u32 = 1;
+const MADV_SEQUENTIAL: u32 = 2;
+const MADV_WILLNEED: u32 = 3;
+const MADV_DONTNEED: u32 = 4;
+
 const NR_read: u32 = 0;
 const NR_write: u32 = 1;
 const NR_open: u32 = 2;
@@ -91,14 +103,17 @@ const NR_sigaltstack: u32 = 131;
 const NR_futex: u32 = 202;
 const NR_sched_getaffinity: u32 = 204;
 const NR_exit_group: u32 = 231;
-const NR_set_robust_list: u32 = 0;
+const NR_set_robust_list: u32 = 273;
 const NR_sendmmsg: u32 = 307;
-const NR_unknown_318: u32 = 318;
+const NR_getrandom: u32 = 318;
 
 const EM_X86_64: u32 = 62;
 
+/// A flag set in the architecture number for all 64-bit architectures.
 const __AUDIT_ARCH_64BIT: u32 = 0x8000_0000;
+/// A flag set in the architecture number for all little-endian architectures.
 const __AUDIT_ARCH_LE: u32 = 0x4000_0000;
+/// The architecture number for x86-64.
 const AUDIT_ARCH_X86_64: u32 = EM_X86_64 | __AUDIT_ARCH_64BIT | __AUDIT_ARCH_LE;
 
 const PR_SET_SECCOMP: c_int = 22;
@@ -118,14 +133,14 @@ static FILTER_EPILOGUE: [sock_filter; 1] = [
 ];
 
 /// Syscalls that are always allowed.
-static ALLOWED_SYSCALLS: [u32; 22] = [
+pub static ALLOWED_SYSCALLS: [u32; 21] = [
     NR_brk,
     NR_close,
     NR_exit,
     NR_exit_group,
     NR_futex,
+    NR_getrandom,
     NR_getuid,
-    NR_madvise,
     NR_mmap,
     NR_mprotect,
     NR_munmap,
@@ -139,7 +154,6 @@ static ALLOWED_SYSCALLS: [u32; 22] = [
     NR_sendto,
     NR_set_robust_list,
     NR_sigaltstack,
-    NR_unknown_318,
     NR_write,
 ];
 
@@ -279,9 +293,38 @@ impl Filter {
                               |filter| filter.allow_this_syscall())
         });
 
+        // Only allow the POSIX values for `madvise`.
+        filter.if_syscall_is(NR_madvise, |filter| {
+            filter.if_arg2_is(MADV_NORMAL |
+                              MADV_RANDOM |
+                              MADV_SEQUENTIAL |
+                              MADV_WILLNEED |
+                              MADV_DONTNEED,
+                              |filter| filter.allow_this_syscall())
+        });
+
         filter.program.push_all(&FILTER_EPILOGUE);
         filter
     }
+
+    /// Dumps this filter to a temporary file.
+    #[cfg(dump_bpf_sockets)]
+    pub fn dump(&self) {
+        let path = CString::from_slice(b"/tmp/gaol-bpf.XXXXXX");
+        let mut path = path.as_bytes_with_nul().to_vec();
+        let fd = unsafe {
+            mkstemp(path.as_mut_ptr() as *mut c_char)
+        };
+        let nbytes = self.program.len() * mem::size_of::<sock_filter>();
+        unsafe {
+            assert!(libc::write(fd, self.program.as_ptr() as *const c_void, nbytes as u64) ==
+                    nbytes as i64);
+            libc::close(fd);
+        }
+    }
+
+    #[cfg(not(dump_bpf_sockets))]
+    pub fn dump(&self) {}
 
     /// Activates this filter, applying all of its restrictions forevermore. This can only be done
     /// once.
@@ -386,7 +429,9 @@ struct sock_fprog {
     filter: *const sock_filter,
 }
 
+#[allow(dead_code)]
 extern {
+    fn mkstemp(template: *mut c_char) -> c_int;
     pub fn prctl(option: c_int, arg2: c_ulong, arg3: c_ulong, arg4: c_ulong, arg5: c_ulong)
                  -> c_int;
 }

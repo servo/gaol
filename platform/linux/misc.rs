@@ -10,7 +10,9 @@
 
 //! Sandboxing on Linux via miscellaneous kernel features.
 
-use libc::{self, EPERM, c_int};
+use platform::linux::seccomp;
+
+use libc::{self, EPERM, c_int, mode_t};
 use std::os;
 
 pub fn activate() -> Result<(),c_int> {
@@ -21,6 +23,20 @@ pub fn activate() -> Result<(),c_int> {
     };
     let result = unsafe {
          setrlimit(RLIMIT_FSIZE, &rlimit)
+    };
+    if result != 0 {
+        return Err(result)
+    }
+
+    // Set a restrictive `umask` so that even if files happened to get written it'd be hard to do
+    // anything with them.
+    unsafe {
+        umask(0);
+    }
+
+    // Disable core dumps and debugging via `PTRACE_ATTACH`.
+    let result = unsafe {
+        seccomp::prctl(PR_SET_DUMPABLE, 0, 0, 0, 0)
     };
     if result != 0 {
         return Err(result)
@@ -58,10 +74,13 @@ struct rlimit {
 #[allow(non_camel_case_types)]
 type rlim_t = u64;
 
+const PR_SET_DUMPABLE: c_int = 4;
+
 const RLIMIT_FSIZE: c_int = 1;
 
 extern {
     fn clearenv() -> c_int;
     fn setrlimit(resource: c_int, rlim: *const rlimit) -> c_int;
+    fn umask(mask: mode_t) -> mode_t;
 }
 

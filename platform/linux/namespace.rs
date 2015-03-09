@@ -52,7 +52,6 @@ impl ChrootJail {
             directory: jail_dir,
         };
 
-        let src = CString::from_slice(b"tmpfs");
         let dest = CString::from_slice(jail.directory
                                            .as_os_str()
                                            .to_str()
@@ -60,7 +59,11 @@ impl ChrootJail {
                                            .as_bytes());
         let tmpfs = CString::from_slice(b"tmpfs");
         let result = unsafe {
-            mount(src.as_ptr(), dest.as_ptr(), tmpfs.as_ptr(), MS_NOATIME, ptr::null())
+            mount(tmpfs.as_ptr(),
+                  dest.as_ptr(),
+                  tmpfs.as_ptr(),
+                  MS_NOATIME | MS_NODEV | MS_NOEXEC | MS_NOSUID,
+                  ptr::null())
         };
         if result != 0 {
             return Err(result)
@@ -289,6 +292,9 @@ pub const CLONE_NEWUSER: c_int = 0x1000_0000;
 pub const CLONE_NEWPID: c_int = 0x2000_0000;
 pub const CLONE_NEWNET: c_int = 0x4000_0000;
 
+const MS_NOSUID: c_ulong = 2;
+const MS_NODEV: c_ulong = 4;
+const MS_NOEXEC: c_ulong = 8;
 const MS_NOATIME: c_ulong = 1024;
 const MS_BIND: c_ulong = 4096;
 const MS_REC: c_ulong = 16384;

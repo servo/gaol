@@ -18,6 +18,11 @@ path = "tests/file-read-metadata.rs"
 harness = false
 
 [[test]]
+name = "forbidden-syscalls"
+path = "tests/forbidden-syscalls.rs"
+harness = false
+
+[[test]]
 name = "network-outbound"
 path = "tests/network-outbound.rs"
 harness = false
