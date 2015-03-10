@@ -73,7 +73,7 @@ use platform;
 ///
 ///    * Exiting the process.
 ///
-/// Because of platform limitiations, patterns within one profile are not permitted to overlap; the
+/// Because of platform limitations, patterns within one profile are not permitted to overlap; the
 /// behavior is undefined if they do. For example, you may not allow metadata reads of the subpath
 /// rooted at `/dev` while allowing full reads of `/dev/null`; you must instead allow full reads of
 /// `/dev` or make the profile more restrictive.
