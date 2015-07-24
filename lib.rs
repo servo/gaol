@@ -9,6 +9,7 @@
 // except according to those terms.
 
 #![feature(convert)]
+#![cfg_attr(any(target_os="linux", target_os="android"), feature(negate_unsigned, vec_push_all))]
 
 #[macro_use]
 extern crate log;
@@ -19,18 +20,18 @@ pub mod profile;
 pub mod sandbox;
 
 pub mod platform {
-    #[cfg(target_os="linux")]
+    #[cfg(any(target_os="android", target_os="linux"))]
     pub use platform::linux::{ChildSandbox, Operation, Sandbox};
     #[cfg(target_os="macos")]
     pub use platform::macos::{ChildSandbox, Operation, Sandbox};
-    #[cfg(any(target_os="linux", target_os="macos"))]
+    #[cfg(any(target_os="android", target_os="linux", target_os="macos"))]
     pub use platform::unix::process::{self, Process};
 
-    #[cfg(target_os="linux")]
+    #[cfg(any(target_os="android", target_os="linux"))]
     pub mod linux;
     #[cfg(target_os="macos")]
     pub mod macos;
-    #[cfg(any(target_os="linux", target_os="macos"))]
+    #[cfg(any(target_os="android", target_os="linux", target_os="macos"))]
     pub mod unix;
 }
 

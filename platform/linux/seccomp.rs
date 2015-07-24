@@ -63,6 +63,7 @@ const O_NOCTTY: c_int = 256;
 const O_CLOEXEC: c_int = 524288;
 
 const FIONREAD: c_int = 0x541b;
+const FIOCLEX: c_int = 0x5451;
 
 const NETLINK_ROUTE: c_int = 0;
 
@@ -254,9 +255,10 @@ impl Filter {
                                          |filter| filter.allow_this_syscall())
             });
 
-            // Only allow the `FIONREAD` `ioctl` to be performed.
+            // Only allow the `FIONREAD` or `FIOCLEX` `ioctl`s to be performed.
             filter.if_syscall_is(NR_ioctl, |filter| {
-                filter.if_arg1_is(FIONREAD as u32, |filter| filter.allow_this_syscall())
+                filter.if_arg1_is(FIONREAD as u32, |filter| filter.allow_this_syscall());
+                filter.if_arg1_is(FIOCLEX as u32, |filter| filter.allow_this_syscall())
             })
         }
 

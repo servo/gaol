@@ -8,8 +8,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(env, io, path)]
-
 extern crate gaol;
 
 use gaol::profile::{AddressPattern, Operation, OperationSupport, OperationSupportLevel};

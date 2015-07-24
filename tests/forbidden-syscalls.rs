@@ -1,7 +1,7 @@
 // Any copyright is dedicated to the Public Domain.
 // http://creativecommons.org/publicdomain/zero/1.0/
 
-#![feature(core, env, io, libc, os)]
+#![feature(core, os)]
 
 extern crate gaol;
 extern crate libc;
@@ -31,7 +31,7 @@ fn test_syscall(number: c_int) {
 #[cfg(target_os="linux")]
 pub fn main() {
     if let Some(arg) = env::args().skip(1).next() {
-        return test_syscall(arg.into_string().unwrap().parse().unwrap())
+        return test_syscall(arg.parse().unwrap())
     }
 
     for syscall in 0..MAX_SYSCALL {

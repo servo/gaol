@@ -1,7 +1,7 @@
 // Any copyright is dedicated to the Public Domain.
 // http://creativecommons.org/publicdomain/zero/1.0/
 
-#![feature(collections, env, io, libc, os, path, rand, slice_position_elem, std_misc)]
+#![feature(slice_position_elem)]
 
 extern crate gaol;
 extern crate libc;
@@ -72,14 +72,16 @@ pub fn main() {
     let allowance_status = Sandbox::new(allowance_profile(
             &temp_path)).start(&mut Command::me().unwrap()
                                                  .arg("allowance_test")
-                                                 .env("GAOL_TEMP_FILE", temp_path.clone()))
+                                                 .env("GAOL_TEMP_FILE", temp_path.clone())
+                                                 .env("RUST_BACKTRACE", "1"))
                         .unwrap()
                         .wait()
                         .unwrap();
     assert!(allowance_status.success());
 
     let prohibition_status = Sandbox::new(prohibition_profile()).start(
-        Command::me().unwrap().arg("prohibition_test").env("GAOL_TEMP_FILE", temp_path.clone()))
+        Command::me().unwrap().arg("prohibition_test").env("GAOL_TEMP_FILE", temp_path.clone())
+                                                      .env("RUST_BACKTRACE", "1"))
                                                                 .unwrap()
                                                                 .wait()
                                                                 .unwrap();

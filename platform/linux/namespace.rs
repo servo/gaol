@@ -18,11 +18,13 @@ use sandbox::Command;
 
 use libc::{self, c_char, c_int, c_ulong, c_void, gid_t, pid_t, uid_t};
 use std::env;
-use std::ffi::{AsOsStr, CString};
+use std::ffi::{CString, OsStr, OsString};
+use std::fs::{self, File};
+use std::io::{self, Write};
 use std::iter;
 use std::mem;
-use std::old_io::{File, FilePermission, FileStat, FileType, IoResult};
-use std::old_io::fs;
+use std::os::unix::prelude::OsStrExt;
+use std::path::{Path, PathBuf};
 use std::ptr;
 
 /// Creates a namespace and sets up a chroot jail.
@@ -34,30 +36,30 @@ pub fn activate(profile: &Profile) -> Result<(),c_int> {
 
 /// A `chroot` jail with a restricted view of the filesystem inside it.
 struct ChrootJail {
-    directory: Path,
+    directory: PathBuf,
 }
 
 impl ChrootJail {
     /// Creates a new `chroot` jail.
     fn new(profile: &Profile) -> Result<ChrootJail,c_int> {
-        let prefix = CString::from_slice(b"/tmp/gaol.XXXXXX");
+        let prefix = CString::new("/tmp/gaol.XXXXXX").unwrap();
         let mut prefix: Vec<u8> = prefix.as_bytes_with_nul().iter().map(|x| *x).collect();
         unsafe {
             if mkdtemp(prefix.as_mut_ptr() as *mut c_char).is_null() {
                 return Err(-1)
             }
         }
-        let jail_dir = Path::new(&prefix[..prefix.len() - 1]);
+        let jail_dir = PathBuf::from(OsStr::from_bytes(&prefix[..prefix.len() - 1]));
         let jail = ChrootJail {
             directory: jail_dir,
         };
 
-        let dest = CString::from_slice(jail.directory
-                                           .as_os_str()
-                                           .to_str()
-                                           .unwrap()
-                                           .as_bytes());
-        let tmpfs = CString::from_slice(b"tmpfs");
+        let dest = CString::new(jail.directory
+                                    .as_os_str()
+                                    .to_str()
+                                    .unwrap()
+                                    .as_bytes()).unwrap();
+        let tmpfs = CString::new("tmpfs").unwrap();
         let result = unsafe {
             mount(tmpfs.as_ptr(),
                   dest.as_ptr(),
@@ -73,7 +75,7 @@ impl ChrootJail {
             match *operation {
                 Operation::FileReadAll(PathPattern::Literal(ref path)) |
                 Operation::FileReadAll(PathPattern::Subpath(ref path)) => {
-                    try!(jail.bind_mount(path))
+                    try!(jail.bind_mount(path));
                 }
                 _ => {}
             }
@@ -84,11 +86,11 @@ impl ChrootJail {
 
     /// Enters the `chroot` jail.
     fn enter(&self) -> Result<(),c_int> {
-        let directory = CString::from_slice(self.directory
-                                                .as_os_str()
-                                                .to_str()
-                                                .unwrap()
-                                                .as_bytes());
+        let directory = CString::new(self.directory
+                                         .as_os_str()
+                                         .to_str()
+                                         .unwrap()
+                                         .as_bytes()).unwrap();
         let result = unsafe {
             chroot(directory.as_ptr())
         };
@@ -106,12 +108,14 @@ impl ChrootJail {
     fn bind_mount(&self, source_path: &Path) -> Result<(),c_int> {
         // Create all intermediate directories.
         let mut destination_path = self.directory.clone();
-        let mut components: Vec<Vec<u8>> =
-            source_path.components().map(|bytes| bytes.iter().map(|x| *x).collect()).collect();
+        let mut components: Vec<OsString> =
+            source_path.components().skip(1)
+                                    .map(|component| component.as_os_str().to_os_string())
+                                    .collect();
         let last_component = components.pop();
         for component in components.into_iter() {
             destination_path.push(component);
-            if fs::mkdir(&destination_path, FilePermission::all()).is_err() {
+            if fs::create_dir(&destination_path).is_err() {
                 return Err(-1)
             }
         }
@@ -119,37 +123,34 @@ impl ChrootJail {
         // Create the mount file or directory.
         if let Some(last_component) = last_component {
             destination_path.push(last_component);
-            match fs::stat(source_path) {
-                Ok(FileStat {
-                    kind: FileType::Directory,
-                    ..
-                }) => {
-                    if fs::mkdir(&destination_path, FilePermission::all()).is_err() {
+            match fs::metadata(source_path) {
+                Ok(ref metadata) if metadata.is_dir() => {
+                    if fs::create_dir(&destination_path).is_err() {
                         return Err(-1)
                     }
                 }
-                Ok(FileStat {
-                    kind: _,
-                    ..
-                }) => {
+                Ok(_) => {
                     if File::create(&destination_path).is_err() {
                         return Err(-1)
                     }
                 }
-                Err(_) => return Err(-1)
+                Err(_) => {
+                    // The source directory didn't exist. Just don't create the bind mount.
+                    return Ok(())
+                }
             }
         }
 
         // Create the bind mount.
-        let source_path = CString::from_slice(source_path.as_os_str()
-                                                         .to_str()
-                                                         .unwrap()
-                                                         .as_bytes());
-        let destination_path = CString::from_slice(destination_path.as_os_str()
-                                                                   .to_str()
-                                                                   .unwrap()
-                                                                   .as_bytes());
-        let bind = CString::from_slice(b"bind");
+        let source_path = CString::new(source_path.as_os_str()
+                                                  .to_str()
+                                                  .unwrap()
+                                                  .as_bytes()).unwrap();
+        let destination_path = CString::new(destination_path.as_os_str()
+                                                            .to_str()
+                                                            .unwrap()
+                                                            .as_bytes()).unwrap();
+        let bind = CString::new("bind").unwrap();
         let result = unsafe {
             mount(source_path.as_ptr(),
                   destination_path.as_ptr(),
@@ -187,7 +188,7 @@ fn drop_capabilities() -> Result<(),c_int> {
 }
 
 /// Sets up the user and PID namespaces.
-unsafe fn prepare_user_and_pid_namespaces(parent_uid: uid_t, parent_gid: gid_t) -> IoResult<()> {
+unsafe fn prepare_user_and_pid_namespaces(parent_uid: uid_t, parent_gid: gid_t) -> io::Result<()> {
     // Enter the main user and PID namespaces.
     assert!(unshare(CLONE_NEWUSER | CLONE_NEWPID) == 0);
 
@@ -204,7 +205,7 @@ unsafe fn prepare_user_and_pid_namespaces(parent_uid: uid_t, parent_gid: gid_t) 
 /// Spawns a child process in a new namespace.
 ///
 /// This function is quite tricky. Hic sunt dracones!
-pub fn start(profile: &Profile, command: &mut Command) -> IoResult<Process> {
+pub fn start(profile: &Profile, command: &mut Command) -> io::Result<Process> {
     // Store our root namespace UID and GID because they're going to change once we enter a user
     // namespace.
     let (parent_uid, parent_gid) = unsafe {

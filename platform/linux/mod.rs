@@ -13,7 +13,7 @@ use platform::unix::process::Process;
 use profile::{self, AddressPattern, OperationSupport, OperationSupportLevel, Profile};
 use sandbox::{ChildSandboxMethods, Command, SandboxMethods};
 
-use std::old_io::IoResult;
+use std::io;
 
 pub mod misc;
 pub mod namespace;
@@ -67,7 +67,7 @@ impl SandboxMethods for Sandbox {
         &self.profile
     }
 
-    fn start(&self, command: &mut Command) -> IoResult<Process> {
+    fn start(&self, command: &mut Command) -> io::Result<Process> {
         self.dump_filter();
         namespace::start(&self.profile, command)
     }

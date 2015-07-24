@@ -13,7 +13,7 @@
 use platform::linux::seccomp;
 
 use libc::{self, EPERM, c_int, mode_t};
-use std::os;
+use std::io;
 
 pub fn activate() -> Result<(),c_int> {
     // Disable writing by setting the write limit to zero.
@@ -46,7 +46,7 @@ pub fn activate() -> Result<(),c_int> {
     // which is OK.)
     unsafe {
         if libc::setsid() < 0 {
-            let result = os::errno() as i32;
+            let result = io::Error::last_os_error().raw_os_error().unwrap() as i32;
             if result != EPERM {
                 return Err(result)
             }
