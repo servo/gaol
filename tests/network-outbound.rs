@@ -9,7 +9,7 @@ extern crate gaol;
 use gaol::profile::{AddressPattern, Operation, Profile};
 use gaol::sandbox::{ChildSandbox, ChildSandboxMethods, Command, Sandbox, SandboxMethods};
 use std::env;
-use std::old_io::{Listener, TcpListener, TcpStream};
+use std::net::{TcpListener, TcpStream};
 
 static ADDRESS: &'static str = "127.0.0.1:7357";
 
@@ -39,7 +39,7 @@ pub fn main() {
     }
 
     let listener = TcpListener::bind(ADDRESS).unwrap();
-    let _acceptor = listener.listen();
+    let _acceptor = listener.incoming();
 
     let allowance_status =
         Sandbox::new(allowance_profile()).start(Command::me().unwrap().arg("allowance_test"))

@@ -1,24 +1,27 @@
 // Any copyright is dedicated to the Public Domain.
 // http://creativecommons.org/publicdomain/zero/1.0/
 
-#![allow(deprecated)]
-#![feature(collections, env, io, libc, os, path, rand, std_misc)]
+#![feature(slice_position_elem)]
 
 extern crate gaol;
 extern crate libc;
+extern crate rand;
 
 use gaol::profile::{Operation, PathPattern, Profile};
 use gaol::sandbox::{ChildSandbox, ChildSandboxMethods, Command, Sandbox, SandboxMethods};
 use libc::c_char;
+use rand::Rng;
 use std::env;
-use std::ffi::{AsOsStr, CString};
-use std::old_io::fs::{File, PathExtensions};
-use std::rand::{self, Rng};
+use std::ffi::{CString, OsStr};
+use std::fs::{self, File};
+use std::io::Write;
+use std::os::unix::prelude::OsStrExt;
+use std::path::PathBuf;
 
 // A conservative overapproximation of `PATH_MAX` on all platforms.
 const PATH_MAX: usize = 4096;
 
-fn allowance_profile(path: &Path) -> Result<Profile,()> {
+fn allowance_profile(path: &PathBuf) -> Result<Profile,()> {
     Profile::new(vec![
         Operation::FileReadMetadata(PathPattern::Literal(path.clone())),
     ])
@@ -26,21 +29,21 @@ fn allowance_profile(path: &Path) -> Result<Profile,()> {
 
 fn prohibition_profile() -> Result<Profile,()> {
     Profile::new(vec![
-        Operation::FileReadMetadata(PathPattern::Subpath(Path::new("/bogus")))
+        Operation::FileReadMetadata(PathPattern::Subpath(PathBuf::from("/bogus")))
     ])
 }
 
 fn allowance_test() {
-    let path = Path::new(env::var("GAOL_TEMP_FILE").unwrap().to_str().unwrap());
+    let path = PathBuf::from(env::var("GAOL_TEMP_FILE").unwrap());
     if ChildSandbox::new(allowance_profile(&path).unwrap()).activate().is_ok() {
-        drop(path.stat().unwrap())
+        drop(fs::metadata(path).unwrap())
     }
 }
 
 fn prohibition_test() {
-    let path = Path::new(env::var("GAOL_TEMP_FILE").unwrap().to_str().unwrap());
+    let path = PathBuf::from(env::var("GAOL_TEMP_FILE").unwrap());
     ChildSandbox::new(prohibition_profile().unwrap()).activate().unwrap();
-    drop(path.stat().unwrap())
+    drop(fs::metadata(path).unwrap())
 }
 
 pub fn main() {
@@ -54,15 +57,18 @@ pub fn main() {
     // symlink.
     let mut temp_path = env::temp_dir();
     unsafe {
-        let c_temp_path = CString::from_slice(temp_path.as_os_str().to_str().unwrap().as_bytes());
+        let c_temp_path =
+            CString::new(temp_path.as_os_str().to_str().unwrap().as_bytes()).unwrap();
         let mut new_temp_path = [0u8; PATH_MAX];
         drop(realpath(c_temp_path.as_ptr(), new_temp_path.as_mut_ptr() as *mut c_char));
-        temp_path = Path::new(&new_temp_path[..new_temp_path.position_elem(&0).unwrap()]);
+        temp_path =
+            PathBuf::from(OsStr::from_bytes(&new_temp_path[..new_temp_path.position_elem(&0)
+                                                                          .unwrap()]));
     }
 
     let suffix: String = rand::thread_rng().gen_ascii_chars().take(6).collect();
     temp_path.push(format!("gaoltest.{}", suffix));
-    File::create(&temp_path).unwrap().write_str("super secret\n").unwrap();
+    File::create(&temp_path).unwrap().write_all(b"super secret\n").unwrap();
 
     if let Ok(profile) = allowance_profile(&temp_path) {
         let allowance_status =

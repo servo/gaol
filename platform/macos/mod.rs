@@ -15,8 +15,9 @@ use profile::{self, AddressPattern, OperationSupport, OperationSupportLevel, Pat
 use sandbox::{ChildSandboxMethods, Command, SandboxMethods};
 
 use libc::{c_char, c_int};
-use std::ffi::{AsOsStr, CString};
-use std::old_io::{IoResult, MemWriter};
+use std::ffi::CString;
+use std::io::{self, Write};
+use std::path::Path;
 use std::ptr;
 use std::str;
 
@@ -65,7 +66,7 @@ impl SandboxMethods for Sandbox {
         &self.profile
     }
 
-    fn start(&self, command: &mut Command) -> IoResult<Process> {
+    fn start(&self, command: &mut Command) -> io::Result<Process> {
         command.env("GAOL_CHILD_PROCESS", "1").spawn()
     }
 }
@@ -84,7 +85,7 @@ impl ChildSandbox {
 
 impl ChildSandboxMethods for ChildSandbox {
     fn activate(&self) -> Result<(),()> {
-        let mut sandbox_profile = MemWriter::new();
+        let mut sandbox_profile = Vec::new();
         sandbox_profile.write_all(SANDBOX_PROFILE_PROLOGUE).unwrap();
         for operation in self.profile.allowed_operations().iter() {
             match *operation {
@@ -125,9 +126,9 @@ impl ChildSandboxMethods for ChildSandbox {
             }
         }
 
-        debug!("{}", str::from_utf8(sandbox_profile.get_ref()).unwrap());
+        debug!("{}", str::from_utf8(&*sandbox_profile).unwrap());
 
-        let profile = CString::from_slice(sandbox_profile.get_ref());
+        let profile = CString::new(sandbox_profile).unwrap();
         let mut err = ptr::null_mut();
         unsafe {
             if sandbox_init(profile.as_ptr(), 0, &mut err) == 0 {
@@ -139,7 +140,7 @@ impl ChildSandboxMethods for ChildSandbox {
     }
 }
 
-fn write_file_pattern(sandbox_profile: &mut MemWriter, path_pattern: &PathPattern) {
+fn write_file_pattern(sandbox_profile: &mut Vec<u8>, path_pattern: &PathPattern) {
     match *path_pattern {
         PathPattern::Literal(ref path) => {
             sandbox_profile.write_all(b"(literal ").unwrap();
@@ -153,21 +154,21 @@ fn write_file_pattern(sandbox_profile: &mut MemWriter, path_pattern: &PathPatter
     sandbox_profile.write_all(b")").unwrap()
 }
 
-fn write_path(sandbox_profile: &mut MemWriter, path: &Path) {
+fn write_path(sandbox_profile: &mut Vec<u8>, path: &Path) {
     write_quoted_string(sandbox_profile, path.as_os_str().to_str().unwrap().as_bytes())
 }
 
-fn write_quoted_string(sandbox_profile: &mut MemWriter, string: &[u8]) {
-    sandbox_profile.write_u8(b'"').unwrap();
+fn write_quoted_string(sandbox_profile: &mut Vec<u8>, string: &[u8]) {
+    sandbox_profile.write_all(&[b'"']).unwrap();
     for &byte in string.iter() {
         // FIXME(pcwalton): Is this the right way to quote strings in TinyScheme?
         // FIXME(pcwalton): Any other special characters we need to worry about in TinyScheme?
         if byte == b'"' || byte == b'\\' {
-            sandbox_profile.write_u8(b'\\').unwrap()
+            sandbox_profile.write_all(&[b'\\']).unwrap()
         }
-        sandbox_profile.write_u8(byte).unwrap()
+        sandbox_profile.write_all(&[byte]).unwrap()
     }
-    sandbox_profile.write_u8(b'"').unwrap()
+    sandbox_profile.write_all(&[b'"']).unwrap()
 }
 
 extern {

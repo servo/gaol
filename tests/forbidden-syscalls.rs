@@ -39,7 +39,7 @@ pub fn main() {
             continue
         }
         let arg = format!("{}", syscall);
-        let status = Sandbox::new(profile()).start(&mut Command::me().unwrap().arg(&arg[]))
+        let status = Sandbox::new(profile()).start(&mut Command::me().unwrap().arg(&arg[..]))
                                             .unwrap()
                                             .wait()
                                             .unwrap();

@@ -12,6 +12,8 @@
 
 use platform;
 
+use std::path::PathBuf;
+
 /// A sandbox profile, which specifies the set of operations that this process is allowed to
 /// perform. Operations not in the list are implicitly prohibited.
 ///
@@ -101,9 +103,9 @@ pub enum Operation {
 #[derive(Clone, Debug)]
 pub enum PathPattern {
     /// One specific path.
-    Literal(Path),
+    Literal(PathBuf),
     /// A directory and all of its contents, recursively.
-    Subpath(Path),
+    Subpath(PathBuf),
 }
 
 /// Describes a network address.
@@ -114,7 +116,7 @@ pub enum AddressPattern {
     /// TCP connections on the given port.
     Tcp(u16),
     /// A local socket at the given path (for example, a Unix socket).
-    LocalSocket(Path),
+    LocalSocket(PathBuf),
 }
 
 impl Profile {

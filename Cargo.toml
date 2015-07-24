@@ -7,6 +7,11 @@ authors = ["The Servo Project Developers"]
 name = "gaol"
 path = "lib.rs"
 
+[dependencies]
+libc = "*"
+log = "*"
+rand = "*"
+
 [[test]]
 name = "file-read-all"
 path = "tests/file-read-all.rs"

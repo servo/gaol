@@ -14,12 +14,10 @@ use sandbox::Command;
 
 use libc::{c_char, c_int, pid_t};
 use std::ffi::CString;
-use std::old_io::{IoError, IoResult};
-use std::old_io::process::ProcessExit;
-use std::old_path::BytesContainer;
+use std::io;
 use std::ptr;
 
-pub fn exec(command: &Command) -> IoError {
+pub fn exec(command: &Command) -> io::Error {
     let mut args: Vec<_> = vec![command.module_path.as_ptr()];
     for arg in command.args.iter() {
         args.push(arg.as_ptr())
@@ -28,9 +26,13 @@ pub fn exec(command: &Command) -> IoError {
 
     let env: Vec<_> =
         command.env.iter().map(|(key, value)| {
-            format!("{}={}", key.container_as_str().unwrap(), value.container_as_str().unwrap())
+            format!("{}={}",
+                    String::from_utf8(key.to_bytes().to_vec()).unwrap(),
+                    String::from_utf8(value.to_bytes().to_vec()).unwrap())
         }).collect();
-    let env: Vec<_> = env.iter().map(|entry| CString::from_slice(entry.as_bytes())).collect();
+    let env: Vec<_> = env.iter()
+                         .map(|entry| CString::new(entry.as_bytes().to_vec()).unwrap())
+                         .collect();
     let mut env: Vec<_> = env.iter().map(|entry| entry.as_ptr()).collect();
     env.push(ptr::null());
 
@@ -38,10 +40,10 @@ pub fn exec(command: &Command) -> IoError {
         execve(command.module_path.as_ptr(), args.as_ptr(), env.as_ptr());
     }
 
-    IoError::last_error()
+    io::Error::last_os_error()
 }
 
-pub fn spawn(command: &Command) -> IoResult<Process> {
+pub fn spawn(command: &Command) -> io::Result<Process> {
     unsafe {
         match fork() {
             0 => {
@@ -63,14 +65,14 @@ pub struct Process {
 }
 
 impl Process {
-    pub fn wait(&self) -> IoResult<ProcessExit> {
+    pub fn wait(&self) -> io::Result<ExitStatus> {
         let mut stat = 0;
         loop {
             let pid = unsafe {
                 waitpid(-1, &mut stat, 0)
             };
             if pid < 0 {
-                return Err(IoError::last_error())
+                return Err(io::Error::last_os_error())
             }
             if pid == self.pid {
                 break
@@ -78,9 +80,24 @@ impl Process {
         }
 
         if WIFEXITED(stat) {
-            Ok(ProcessExit::ExitStatus(WEXITSTATUS(stat) as isize))
+            Ok(ExitStatus::Code(WEXITSTATUS(stat) as i32))
         } else {
-            Ok(ProcessExit::ExitSignal(WTERMSIG(stat) as isize))
+            Ok(ExitStatus::Signal(WTERMSIG(stat) as i32))
+        }
+    }
+}
+
+pub enum ExitStatus {
+    Code(i32),
+    Signal(i32),
+}
+
+impl ExitStatus {
+    #[inline]
+    pub fn success(&self) -> bool {
+        match *self {
+            ExitStatus::Code(0) => true,
+            _ => false,
         }
     }
 }

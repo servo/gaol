@@ -19,7 +19,7 @@ static SYSCTL_NAME: &'static str = "hw.ncpu";
 
 #[cfg(target_os="macos")]
 fn look_at_sysctl() {
-    let sysctl_name = CString::from_slice(SYSCTL_NAME.as_bytes());
+    let sysctl_name = CString::new(SYSCTL_NAME.as_bytes().to_vec()).unwrap();
     let mut length = 0;
     unsafe {
         sysctlbyname(sysctl_name.as_ptr(), ptr::null_mut(), &mut length, ptr::null_mut(), 0);

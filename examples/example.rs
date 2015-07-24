@@ -16,14 +16,15 @@ use gaol::profile::{AddressPattern, Operation, OperationSupport, OperationSuppor
 use gaol::profile::{PathPattern, Profile};
 use gaol::sandbox::{ChildSandbox, ChildSandboxMethods, Command, Sandbox, SandboxMethods};
 use std::env;
-use std::old_io::fs::File;
+use std::fs::File;
+use std::path::PathBuf;
 
 // Create the sandbox profile.
 fn profile() -> Profile {
     // Set up the list of desired operations.
     let mut operations = vec![
-        Operation::FileReadAll(PathPattern::Subpath(Path::new("/lib"))),
-        Operation::FileReadAll(PathPattern::Literal(Path::new("/etc"))),
+        Operation::FileReadAll(PathPattern::Subpath(PathBuf::from("/lib"))),
+        Operation::FileReadAll(PathPattern::Literal(PathBuf::from("/etc"))),
         Operation::NetworkOutbound(AddressPattern::All),
         Operation::SystemInfoRead,
     ];
@@ -46,7 +47,7 @@ fn main() {
         Some(ref arg) if arg == "child" => {
             // This is the child process.
             ChildSandbox::new(profile()).activate().unwrap();
-            match File::open(&Path::new("/bin/sh")) {
+            match File::open(&PathBuf::from("/bin/sh")) {
                 Err(error) => println!("{:?}", error),
                 Ok(_) => panic!("could access /bin/sh"),
             }

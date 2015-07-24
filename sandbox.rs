@@ -14,10 +14,10 @@ use platform::process::{self, Process};
 use profile::Profile;
 
 use std::collections::HashMap;
+use std::convert::AsRef;
 use std::env;
-use std::ffi::CString;
-use std::old_io::IoResult;
-use std::old_path::BytesContainer;
+use std::ffi::{CString, OsStr};
+use std::io;
 
 pub use platform::{ChildSandbox, Sandbox};
 
@@ -30,7 +30,7 @@ pub trait SandboxMethods {
     fn profile(&self) -> &Profile;
 
     /// Spawns a child process eligible for sandboxing.
-    fn start(&self, command: &mut Command) -> IoResult<Process>;
+    fn start(&self, command: &mut Command) -> io::Result<Process>;
 }
 
 /// All platform-specific sandboxes in the child process implement this trait.
@@ -53,41 +53,43 @@ impl Command {
     /// Constructs a new `Command` for launching the executable at path `module_path` with no
     /// arguments and no environment by default. Builder methods are provided to change these
     /// defaults and otherwise configure the process.
-    pub fn new<T>(module_path: T) -> Command where T: BytesContainer {
+    pub fn new<T>(module_path: T) -> Command where T: AsRef<OsStr> {
         Command {
-            module_path: CString::from_slice(module_path.container_as_bytes()),
+            module_path: CString::new(module_path.as_ref().to_bytes().unwrap()).unwrap(),
             args: Vec::new(),
             env: HashMap::new(),
         }
     }
 
     /// Constructs a new `Command` for launching the current executable.
-    pub fn me() -> IoResult<Command> {
+    pub fn me() -> io::Result<Command> {
         Ok(Command::new(try!(env::current_exe())))
     }
 
     /// Adds an argument to pass to the program.
-    pub fn arg<'a,T>(&'a mut self, arg: T) -> &'a mut Command where T: BytesContainer {
-        self.args.push(CString::from_slice(arg.container_as_bytes()));
+    pub fn arg<'a,T>(&'a mut self, arg: T) -> &'a mut Command where T: AsRef<OsStr> {
+        self.args.push(CString::new(arg.as_ref().to_bytes().unwrap()).unwrap());
         self
     }
 
     /// Adds multiple arguments to pass to the program.
-    pub fn args<'a,T>(&'a mut self, args: &[T]) -> &'a mut Command where T: BytesContainer {
-        self.args.extend(args.iter().map(|arg| CString::from_slice(arg.container_as_bytes())));
+    pub fn args<'a,T>(&'a mut self, args: &[T]) -> &'a mut Command where T: AsRef<OsStr> {
+        self.args.extend(args.iter().map(|arg| {
+            CString::new(arg.as_ref().to_bytes().unwrap()).unwrap()
+        }));
         self
     }
 
     /// Inserts or updates an environment variable mapping.
     pub fn env<'a,T,U>(&'a mut self, key: T, val: U) -> &'a mut Command
-                       where T: BytesContainer, U: BytesContainer {
-        self.env.insert(CString::from_slice(key.container_as_bytes()),
-                        CString::from_slice(val.container_as_bytes()));
+                       where T: AsRef<OsStr>, U: AsRef<OsStr> {
+        self.env.insert(CString::new(key.as_ref().to_bytes().unwrap()).unwrap(),
+                        CString::new(val.as_ref().to_bytes().unwrap()).unwrap());
         self
     }
 
     /// Executes the command as a child process, which is returned.
-    pub fn spawn(&self) -> IoResult<Process> {
+    pub fn spawn(&self) -> io::Result<Process> {
         process::spawn(self)
     }
 }
