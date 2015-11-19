@@ -16,7 +16,7 @@ use platform::unix;
 use profile::{Operation, PathPattern, Profile}; 
 use sandbox::Command;
 
-use libc::{self, c_char, c_int, c_ulong, c_void, gid_t, pid_t, uid_t};
+use libc::{self, c_char, c_int, c_ulong, c_void, gid_t, pid_t, size_t, ssize_t, uid_t};
 use std::env;
 use std::ffi::{CString, OsStr, OsString};
 use std::fs::{self, File};
@@ -256,8 +256,8 @@ pub fn start(profile: &Profile, command: &mut Command) -> io::Result<Process> {
                     // Send the PID of our child up to our parent and exit.
                     assert!(libc::write(pipe_fds[1],
                                         &grandchild_pid as *const pid_t as *const c_void,
-                                        mem::size_of::<pid_t>() as u64) ==
-                                            mem::size_of::<pid_t>() as i64);
+                                        mem::size_of::<pid_t>() as size_t) ==
+                                            mem::size_of::<pid_t>() as ssize_t);
                     libc::exit(0);
                 }
             }
@@ -270,7 +270,8 @@ pub fn start(profile: &Profile, command: &mut Command) -> io::Result<Process> {
         let mut grandchild_pid: pid_t = 0;
         assert!(libc::read(pipe_fds[0],
                            &mut grandchild_pid as *mut i32 as *mut c_void,
-                           mem::size_of::<pid_t>() as u64) == mem::size_of::<pid_t>() as i64);
+                           mem::size_of::<pid_t>() as size_t) ==
+                mem::size_of::<pid_t>() as ssize_t);
         Ok(Process {
             pid: grandchild_pid,
         })
