@@ -108,14 +108,20 @@ const NR_set_robust_list: u32 = 273;
 const NR_sendmmsg: u32 = 307;
 const NR_getrandom: u32 = 318;
 
+const EM_386: u32 = 3;
+const EM_ARM: u32 = 40;
 const EM_X86_64: u32 = 62;
 
 /// A flag set in the architecture number for all 64-bit architectures.
 const __AUDIT_ARCH_64BIT: u32 = 0x8000_0000;
 /// A flag set in the architecture number for all little-endian architectures.
 const __AUDIT_ARCH_LE: u32 = 0x4000_0000;
+/// The architecture number for x86.
+const AUDIT_ARCH_X86: u32 = EM_386 | __AUDIT_ARCH_LE;
 /// The architecture number for x86-64.
 const AUDIT_ARCH_X86_64: u32 = EM_X86_64 | __AUDIT_ARCH_64BIT | __AUDIT_ARCH_LE;
+/// The architecture number for ARM.
+const AUDIT_ARCH_ARM: u32 = EM_ARM | __AUDIT_ARCH_LE;
 
 const PR_SET_SECCOMP: c_int = 22;
 const PR_SET_NO_NEW_PRIVS: c_int = 38;
