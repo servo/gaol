@@ -314,7 +314,7 @@ impl Filter {
             }
         });
 
-        filter.program.push_all(&FILTER_EPILOGUE);
+        filter.program.extend_from_slice(&FILTER_EPILOGUE);
         filter
     }
 
