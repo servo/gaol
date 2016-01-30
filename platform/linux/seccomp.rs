@@ -314,7 +314,7 @@ impl Filter {
             }
         });
 
-        filter.program.push_all(&FILTER_EPILOGUE);
+        filter.program.extend_from_slice(&FILTER_EPILOGUE);
         filter
     }
 
@@ -353,7 +353,7 @@ impl Filter {
             let result = prctl(PR_SET_SECCOMP,
                                SECCOMP_MODE_FILTER,
                                &program as *const sock_fprog as usize as c_ulong,
-                               -1,
+                               !0,
                                0);
             if result == 0 {
                 Ok(())
@@ -434,7 +434,6 @@ struct sock_filter {
 
 #[repr(C)]
 #[derive(Copy, Clone)]
-#[allow(raw_pointer_derive)]
 struct sock_fprog {
     len: c_ushort,
     filter: *const sock_filter,
