@@ -8,6 +8,8 @@ See `examples/example.rs` and the tests for examples of usage.
 
 *At the moment, `gaol` is only lightly reviewed for correctness and security.* It should not be considered mature or "battle-tested". Use at your own risk.
 
+[Documentation](https://doc.servo.org/gaol/index.html)
+
 ## Operation
 
 `gaol` is designed to be used in a multiprocess scenario. (This is necessary for sandboxing on some operating systems, for example Windows and Linux.) In the parent process, you create a *profile*—a set of operations that the process is allowed to perform—and then spawn less-privileged processes subject to the restrictions in the profile. A profile is a *whitelist* of operations rather than a blacklist; operations not in the profile are automatically prohibited. See the documentation in the `profile` module for an exhaustive list of allowed and prohibited operations.
