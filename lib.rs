@@ -9,7 +9,7 @@
 // except according to those terms.
 
 #![feature(convert)]
-#![cfg_attr(any(target_os="linux", target_os="android"), feature(negate_unsigned, vec_push_all))]
+#![cfg_attr(any(target_os="linux", target_os="android"), feature(vec_push_all))]
 
 #[macro_use]
 extern crate log;
