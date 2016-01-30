@@ -1,8 +1,6 @@
 // Any copyright is dedicated to the Public Domain.
 // http://creativecommons.org/publicdomain/zero/1.0/
 
-#![feature(slice_position_elem)]
-
 extern crate gaol;
 extern crate libc;
 extern crate rand;
@@ -60,9 +58,8 @@ pub fn main() {
             CString::new(temp_path.as_os_str().to_str().unwrap().as_bytes()).unwrap();
         let mut new_temp_path = [0u8; PATH_MAX];
         drop(realpath(c_temp_path.as_ptr(), new_temp_path.as_mut_ptr() as *mut c_char));
-        temp_path =
-            PathBuf::from(OsStr::from_bytes(&new_temp_path[..new_temp_path.position_elem(&0)
-                                                                          .unwrap()]));
+        let pos = new_temp_path.iter().position(|&x| x == 0).unwrap();
+        temp_path = PathBuf::from(OsStr::from_bytes(&new_temp_path[..pos]));
     }
 
     let suffix: String = rand::thread_rng().gen_ascii_chars().take(6).collect();
