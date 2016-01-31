@@ -240,13 +240,13 @@ pub fn start(profile: &Profile, command: &mut Command) -> io::Result<Process> {
 
             // Set up our user and PID namespaces. The PID namespace won't actually come into
             // effect until the next fork(), because PIDs are immutable.
-            prepare_user_and_pid_namespaces(parent_uid, parent_gid).unwrap();
+            //prepare_user_and_pid_namespaces(parent_uid, parent_gid).unwrap();
 
             // Fork again, to enter the PID namespace.
             match fork() {
                 0 => {
                     // Enter the auxiliary namespaces.
-                    assert!(unshare(unshare_flags) == 0);
+                    //assert!(unshare(unshare_flags) == 0);
 
                     // Go ahead and start the command.
                     drop(unix::process::exec(command));
@@ -269,7 +269,7 @@ pub fn start(profile: &Profile, command: &mut Command) -> io::Result<Process> {
         // Retrieve our grandchild's PID.
         let mut grandchild_pid: pid_t = 0;
         assert!(libc::read(pipe_fds[0],
-                           &mut grandchild_pid as *mut i32 as *mut c_void,
+                           &mut grandchild_pid as *mut pid_t as *mut c_void,
                            mem::size_of::<pid_t>() as size_t) ==
                 mem::size_of::<pid_t>() as ssize_t);
         Ok(Process {
