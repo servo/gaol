@@ -16,6 +16,7 @@ use libc::{c_char, c_int, pid_t};
 use std::ffi::CString;
 use std::io;
 use std::ptr;
+use std::str;
 
 pub fn exec(command: &Command) -> io::Error {
     let mut args: Vec<_> = vec![command.module_path.as_ptr()];
@@ -26,13 +27,11 @@ pub fn exec(command: &Command) -> io::Error {
 
     let env: Vec<_> =
         command.env.iter().map(|(key, value)| {
-            format!("{}={}",
-                    String::from_utf8(key.to_bytes().to_vec()).unwrap(),
-                    String::from_utf8(value.to_bytes().to_vec()).unwrap())
+            let entry = format!("{}={}",
+                                str::from_utf8(key.to_bytes()).unwrap(),
+                                str::from_utf8(value.to_bytes()).unwrap());
+            CString::new(entry).unwrap()
         }).collect();
-    let env: Vec<_> = env.iter()
-                         .map(|entry| CString::new(entry.as_bytes().to_vec()).unwrap())
-                         .collect();
     let mut env: Vec<_> = env.iter().map(|entry| entry.as_ptr()).collect();
     env.push(ptr::null());
 
