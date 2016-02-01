@@ -353,7 +353,7 @@ impl Filter {
             let result = prctl(PR_SET_SECCOMP,
                                SECCOMP_MODE_FILTER,
                                &program as *const sock_fprog as usize as c_ulong,
-                               -1,
+                               !0,
                                0);
             if result == 0 {
                 Ok(())
