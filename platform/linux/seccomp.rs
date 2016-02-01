@@ -314,7 +314,7 @@ impl Filter {
             }
         });
 
-        filter.program.push_all(&FILTER_EPILOGUE);
+        filter.program.extend_from_slice(&FILTER_EPILOGUE);
         filter
     }
 
@@ -434,7 +434,6 @@ struct sock_filter {
 
 #[repr(C)]
 #[derive(Copy, Clone)]
-#[allow(raw_pointer_derive)]
 struct sock_fprog {
     len: c_ushort,
     filter: *const sock_filter,
