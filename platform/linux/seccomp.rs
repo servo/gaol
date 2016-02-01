@@ -35,6 +35,9 @@ const ARCH_NR: u32 = AUDIT_ARCH_X86_64;
 /// The architecture number for ARM.
 #[cfg(target_arch="arm")]
 const ARCH_NR: u32 = AUDIT_ARCH_ARM;
+/// The architecture number for ARM 64-bit.
+#[cfg(target_arch="aarch64")]
+const ARCH_NR: u32 = AUDIT_ARCH_AARCH64;
 
 const SECCOMP_RET_KILL: u32 = 0;
 const SECCOMP_RET_ALLOW: u32 = 0x7fff_0000;
@@ -111,6 +114,7 @@ const NR_getrandom: u32 = 318;
 const EM_386: u32 = 3;
 const EM_ARM: u32 = 40;
 const EM_X86_64: u32 = 62;
+const EM_AARCH64: u32 = 183;
 
 /// A flag set in the architecture number for all 64-bit architectures.
 const __AUDIT_ARCH_64BIT: u32 = 0x8000_0000;
@@ -122,6 +126,8 @@ const AUDIT_ARCH_X86: u32 = EM_386 | __AUDIT_ARCH_LE;
 const AUDIT_ARCH_X86_64: u32 = EM_X86_64 | __AUDIT_ARCH_64BIT | __AUDIT_ARCH_LE;
 /// The architecture number for ARM.
 const AUDIT_ARCH_ARM: u32 = EM_ARM | __AUDIT_ARCH_LE;
+/// The architecture number for ARM 64-bit.
+const AUDIT_ARCH_AARCH64: u32 = EM_AARCH64 | __AUDIT_ARCH_64BIT | __AUDIT_ARCH_LE;
 
 const PR_SET_SECCOMP: c_int = 22;
 const PR_SET_NO_NEW_PRIVS: c_int = 38;
