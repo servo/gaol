@@ -2,6 +2,7 @@
 name = "gaol"
 version = "0.0.1"
 authors = ["The Servo Project Developers"]
+license = "MIT OR Apache-2.0"
 
 [lib]
 name = "gaol"
