@@ -1,9 +1,6 @@
 // Any copyright is dedicated to the Public Domain.
 // http://creativecommons.org/publicdomain/zero/1.0/
 
-#![allow(deprecated)]
-#![feature(env, io)]
-
 extern crate gaol;
 
 use gaol::profile::{AddressPattern, Operation, Profile};
