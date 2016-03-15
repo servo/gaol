@@ -40,6 +40,19 @@ pub trait ChildSandboxMethods {
     fn activate(&self) -> Result<(),()>;
 }
 
+fn cstring<T>(path: T) -> CString
+    where T: AsRef<OsStr>
+{
+    let path = path.as_ref();
+    let bytes = if cfg!(windows) {
+        path.to_str().unwrap().as_bytes()
+    } else {
+        use std::os::unix::ffi::OsStrExt;
+        path.as_bytes()
+    };
+    CString::new(bytes).unwrap()
+}
+
 pub struct Command {
     /// A path to the executable.
     pub module_path: CString,
@@ -55,7 +68,7 @@ impl Command {
     /// defaults and otherwise configure the process.
     pub fn new<T>(module_path: T) -> Command where T: AsRef<OsStr> {
         Command {
-            module_path: CString::new(module_path.as_ref().to_bytes().unwrap()).unwrap(),
+            module_path: cstring(module_path),
             args: Vec::new(),
             env: HashMap::new(),
         }
@@ -68,23 +81,20 @@ impl Command {
 
     /// Adds an argument to pass to the program.
     pub fn arg<'a,T>(&'a mut self, arg: T) -> &'a mut Command where T: AsRef<OsStr> {
-        self.args.push(CString::new(arg.as_ref().to_bytes().unwrap()).unwrap());
+        self.args.push(cstring(arg));
         self
     }
 
     /// Adds multiple arguments to pass to the program.
     pub fn args<'a,T>(&'a mut self, args: &[T]) -> &'a mut Command where T: AsRef<OsStr> {
-        self.args.extend(args.iter().map(|arg| {
-            CString::new(arg.as_ref().to_bytes().unwrap()).unwrap()
-        }));
+        self.args.extend(args.iter().map(cstring));
         self
     }
 
     /// Inserts or updates an environment variable mapping.
     pub fn env<'a,T,U>(&'a mut self, key: T, val: U) -> &'a mut Command
                        where T: AsRef<OsStr>, U: AsRef<OsStr> {
-        self.env.insert(CString::new(key.as_ref().to_bytes().unwrap()).unwrap(),
-                        CString::new(val.as_ref().to_bytes().unwrap()).unwrap());
+        self.env.insert(cstring(key), cstring(val));
         self
     }
 
