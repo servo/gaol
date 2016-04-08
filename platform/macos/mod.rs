@@ -15,7 +15,7 @@ use profile::{self, AddressPattern, OperationSupport, OperationSupportLevel, Pat
 use sandbox::{ChildSandboxMethods, Command, SandboxMethods};
 
 use libc::{c_char, c_int};
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::io::{self, Write};
 use std::path::Path;
 use std::ptr;
@@ -134,6 +134,8 @@ impl ChildSandboxMethods for ChildSandbox {
             if sandbox_init(profile.as_ptr(), 0, &mut err) == 0 {
                 Ok(())
             } else {
+                error!("Failed to init sandbox: {:?}", CStr::from_ptr(err));
+                sandbox_free_error(err);
                 Err(())
             }
         }
@@ -173,5 +175,6 @@ fn write_quoted_string(sandbox_profile: &mut Vec<u8>, string: &[u8]) {
 
 extern {
     fn sandbox_init(profile: *const c_char, flags: u64, errorbuf: *mut *mut c_char) -> c_int;
+    fn sandbox_free_error(errorbuf: *mut c_char);
 }
 
