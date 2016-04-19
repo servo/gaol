@@ -16,27 +16,26 @@
 
 #![allow(non_upper_case_globals, unused_imports)]
 
+use libc::{c_ushort, c_void};
+use libc::{self, AF_INET, AF_INET6, AF_UNIX, O_NONBLOCK, O_RDONLY, c_char, c_int, c_ulong};
 use platform::linux::namespace::{CLONE_CHILD_CLEARTID, CLONE_FILES, CLONE_FS};
 use platform::linux::namespace::{CLONE_PARENT_SETTID, CLONE_SETTLS, CLONE_SIGHAND, CLONE_SYSVSEM};
 use platform::linux::namespace::{CLONE_THREAD, CLONE_VM};
 use profile::{Operation, Profile};
-
-use libc::{self, AF_INET, AF_INET6, AF_UNIX, O_NONBLOCK, O_RDONLY, c_char, c_int, c_ulong};
-use libc::{c_ushort, c_void};
 use std::ffi::CString;
 use std::mem;
 
 /// The architecture number for x86.
-#[cfg(target_arch="x86")]
+#[cfg(target_arch = "x86")]
 const ARCH_NR: u32 = AUDIT_ARCH_X86;
 /// The architecture number for x86-64.
-#[cfg(target_arch="x86_64")]
+#[cfg(target_arch = "x86_64")]
 const ARCH_NR: u32 = AUDIT_ARCH_X86_64;
 /// The architecture number for ARM.
-#[cfg(target_arch="arm")]
+#[cfg(target_arch = "arm")]
 const ARCH_NR: u32 = AUDIT_ARCH_ARM;
 /// The architecture number for ARM 64-bit.
-#[cfg(target_arch="aarch64")]
+#[cfg(target_arch = "aarch64")]
 const ARCH_NR: u32 = AUDIT_ARCH_AARCH64;
 
 const SECCOMP_RET_KILL: u32 = 0;

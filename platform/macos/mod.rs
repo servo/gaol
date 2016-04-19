@@ -10,11 +10,10 @@
 
 //! Sandboxing on Mac OS X via Seatbelt (`sandboxd`).
 
+use libc::{c_char, c_int};
 use platform::unix::process::Process;
 use profile::{self, AddressPattern, OperationSupport, OperationSupportLevel, PathPattern, Profile};
 use sandbox::{ChildSandboxMethods, Command, SandboxMethods};
-
-use libc::{c_char, c_int};
 use std::ffi::{CStr, CString};
 use std::io::{self, Write};
 use std::path::Path;

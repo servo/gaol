@@ -12,7 +12,6 @@
 
 use platform::process::{self, Process};
 use profile::Profile;
-
 use std::collections::HashMap;
 use std::convert::AsRef;
 use std::env;

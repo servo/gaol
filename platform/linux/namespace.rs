@@ -10,13 +10,12 @@
 
 //! Sandboxing on Linux via namespaces.
 
+use libc::{self, c_char, c_int, c_ulong, c_void, gid_t, pid_t, size_t, ssize_t, uid_t};
 use platform::linux::seccomp;
-use platform::unix::process::Process;
 use platform::unix;
+use platform::unix::process::Process;
 use profile::{Operation, PathPattern, Profile};
 use sandbox::Command;
-
-use libc::{self, c_char, c_int, c_ulong, c_void, gid_t, pid_t, size_t, ssize_t, uid_t};
 use std::env;
 use std::ffi::{CString, OsStr, OsString};
 use std::fs::{self, File};

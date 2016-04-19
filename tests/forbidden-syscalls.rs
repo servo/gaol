@@ -9,8 +9,7 @@ use gaol::sandbox::{ChildSandbox, ChildSandboxMethods, Command, Sandbox, Sandbox
 use libc::c_int;
 use std::env;
 
-#[cfg(target_os="linux")]
-use gaol::platform::linux::seccomp::ALLOWED_SYSCALLS;
+#[cfg(target_os = "linux")] use gaol::platform::linux::seccomp::ALLOWED_SYSCALLS;
 
 const MAX_SYSCALL: u32 = 320;
 
@@ -18,7 +17,7 @@ fn profile() -> Profile {
     Profile::new(Vec::new()).unwrap()
 }
 
-#[cfg(target_os="linux")]
+#[cfg(target_os = "linux")]
 fn test_syscall(number: c_int) {
     ChildSandbox::new(profile()).activate().unwrap();
     unsafe {
@@ -26,7 +25,7 @@ fn test_syscall(number: c_int) {
     }
 }
 
-#[cfg(target_os="linux")]
+#[cfg(target_os = "linux")]
 pub fn main() {
     if let Some(arg) = env::args().skip(1).next() {
         return test_syscall(arg.parse().unwrap())
@@ -45,10 +44,10 @@ pub fn main() {
     }
 }
 
-#[cfg(not(target_os="linux"))]
+#[cfg(not(target_os = "linux"))]
 fn main() {}
 
-#[cfg(target_os="linux")]
+#[cfg(target_os = "linux")]
 extern {
     fn syscall(number: c_int, ...) -> c_int;
 }

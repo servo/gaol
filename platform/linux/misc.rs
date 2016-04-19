@@ -10,9 +10,8 @@
 
 //! Sandboxing on Linux via miscellaneous kernel features.
 
-use platform::linux::seccomp;
-
 use libc::{self, EPERM, c_int, mode_t};
+use platform::linux::seccomp;
 use std::io;
 
 pub fn activate() -> Result<(), c_int> {

@@ -12,7 +12,6 @@ use platform::linux::seccomp::Filter;
 use platform::unix::process::Process;
 use profile::{self, AddressPattern, OperationSupport, OperationSupportLevel, Profile};
 use sandbox::{ChildSandboxMethods, Command, SandboxMethods};
-
 use std::io;
 
 pub mod misc;

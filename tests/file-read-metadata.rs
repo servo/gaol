@@ -19,13 +19,13 @@ use std::path::PathBuf;
 // A conservative overapproximation of `PATH_MAX` on all platforms.
 const PATH_MAX: usize = 4096;
 
-fn allowance_profile(path: &PathBuf) -> Result<Profile,()> {
+fn allowance_profile(path: &PathBuf) -> Result<Profile, ()> {
     Profile::new(vec![
         Operation::FileReadMetadata(PathPattern::Literal(path.clone())),
     ])
 }
 
-fn prohibition_profile() -> Result<Profile,()> {
+fn prohibition_profile() -> Result<Profile, ()> {
     Profile::new(vec![
         Operation::FileReadMetadata(PathPattern::Subpath(PathBuf::from("/bogus")))
     ])

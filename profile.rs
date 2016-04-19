@@ -11,7 +11,6 @@
 //! Sandbox profiles—lists of permitted operations.
 
 use platform;
-
 use std::path::PathBuf;
 
 /// A sandbox profile, which specifies the set of operations that this process is allowed to

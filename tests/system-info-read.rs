@@ -14,7 +14,7 @@ use std::ptr;
 
 static SYSCTL_NAME: &'static str = "hw.ncpu";
 
-#[cfg(target_os="macos")]
+#[cfg(target_os = "macos")]
 fn look_at_sysctl() {
     let sysctl_name = CString::new(SYSCTL_NAME.as_bytes().to_vec()).unwrap();
     let mut length = 0;
@@ -37,19 +37,19 @@ fn prohibition_profile() -> Profile {
     Profile::new(Vec::new()).unwrap()
 }
 
-#[cfg(target_os="macos")]
+#[cfg(target_os = "macos")]
 pub fn allowance_test() {
     ChildSandbox::new(allowance_profile()).activate().unwrap();
     look_at_sysctl();
 }
 
-#[cfg(target_os="macos")]
+#[cfg(target_os = "macos")]
 pub fn prohibition_test() {
     ChildSandbox::new(prohibition_profile()).activate().unwrap();
     look_at_sysctl();
 }
 
-#[cfg(target_os="macos")]
+#[cfg(target_os = "macos")]
 pub fn main() {
     match env::args().skip(1).next() {
         Some(ref arg) if arg == "allowance_test" => return allowance_test(),
@@ -73,12 +73,12 @@ pub fn main() {
     assert!(!prohibition_status.success());
 }
 
-#[cfg(not(target_os="macos"))]
+#[cfg(not(target_os = "macos"))]
 pub fn main() {
     // Currently unsupported on non-Mac platforms.
 }
 
-#[cfg(target_os="macos")]
+#[cfg(target_os = "macos")]
 extern {
     fn sysctlbyname(name: *const c_char,
                     oldp: *mut c_void,
