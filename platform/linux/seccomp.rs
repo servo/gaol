@@ -134,55 +134,43 @@ const PR_SET_NO_NEW_PRIVS: c_int = 38;
 
 const SECCOMP_MODE_FILTER: c_ulong = 2;
 
-static FILTER_PROLOGUE: [sock_filter; 3] = [
-    VALIDATE_ARCHITECTURE_0,
-    VALIDATE_ARCHITECTURE_1,
-    VALIDATE_ARCHITECTURE_2,
-];
+static FILTER_PROLOGUE: [sock_filter; 3] = [VALIDATE_ARCHITECTURE_0,
+                                            VALIDATE_ARCHITECTURE_1,
+                                            VALIDATE_ARCHITECTURE_2];
 
 // A most untimely end...
-static FILTER_EPILOGUE: [sock_filter; 1] = [
-    KILL_PROCESS,
-];
+static FILTER_EPILOGUE: [sock_filter; 1] = [KILL_PROCESS];
 
 /// Syscalls that are always allowed.
-pub static ALLOWED_SYSCALLS: [u32; 21] = [
-    NR_brk,
-    NR_close,
-    NR_exit,
-    NR_exit_group,
-    NR_futex,
-    NR_getrandom,
-    NR_getuid,
-    NR_mmap,
-    NR_mprotect,
-    NR_munmap,
-    NR_poll,
-    NR_read,
-    NR_recvfrom,
-    NR_recvmsg,
-    NR_rt_sigreturn,
-    NR_sched_getaffinity,
-    NR_sendmmsg,
-    NR_sendto,
-    NR_set_robust_list,
-    NR_sigaltstack,
-    NR_write,
-];
+pub static ALLOWED_SYSCALLS: [u32; 21] = [NR_brk,
+                                          NR_close,
+                                          NR_exit,
+                                          NR_exit_group,
+                                          NR_futex,
+                                          NR_getrandom,
+                                          NR_getuid,
+                                          NR_mmap,
+                                          NR_mprotect,
+                                          NR_munmap,
+                                          NR_poll,
+                                          NR_read,
+                                          NR_recvfrom,
+                                          NR_recvmsg,
+                                          NR_rt_sigreturn,
+                                          NR_sched_getaffinity,
+                                          NR_sendmmsg,
+                                          NR_sendto,
+                                          NR_set_robust_list,
+                                          NR_sigaltstack,
+                                          NR_write];
 
-static ALLOWED_SYSCALLS_FOR_FILE_READ: [u32; 5] = [
-    NR_access,
-    NR_fstat,
-    NR_lseek,
-    NR_readlink,
-    NR_stat,
-];
+static ALLOWED_SYSCALLS_FOR_FILE_READ: [u32; 5] = [NR_access,
+                                                   NR_fstat,
+                                                   NR_lseek,
+                                                   NR_readlink,
+                                                   NR_stat];
 
-static ALLOWED_SYSCALLS_FOR_NETWORK_OUTBOUND: [u32; 3] = [
-    NR_bind,
-    NR_connect,
-    NR_getsockname,
-];
+static ALLOWED_SYSCALLS_FOR_NETWORK_OUTBOUND: [u32; 3] = [NR_bind, NR_connect, NR_getsockname];
 
 const ALLOW_SYSCALL: sock_filter = sock_filter {
     code: RET + K,
@@ -248,14 +236,13 @@ pub struct Filter {
 
 impl Filter {
     pub fn new(profile: &Profile) -> Filter {
-        let mut filter = Filter {
-            program: FILTER_PROLOGUE.iter().map(|x| *x).collect(),
-        };
+        let mut filter = Filter { program: FILTER_PROLOGUE.iter().map(|x| *x).collect() };
         filter.allow_syscalls(&ALLOWED_SYSCALLS);
 
         if profile.allowed_operations().iter().any(|operation| {
             match *operation {
-                Operation::FileReadAll(_) | Operation::FileReadMetadata(_) => true,
+                Operation::FileReadAll(_) |
+                Operation::FileReadMetadata(_) => true,
                 _ => false,
             }
         }) {
@@ -295,27 +282,17 @@ impl Filter {
 
         // Only allow normal threads to be created.
         filter.if_syscall_is(NR_clone, |filter| {
-            filter.if_arg0_is((CLONE_VM |
-                               CLONE_FS |
-                               CLONE_FILES |
-                               CLONE_SIGHAND |
-                               CLONE_THREAD |
+            filter.if_arg0_is((CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_THREAD |
                                CLONE_SYSVSEM |
-                               CLONE_SETTLS |
-                               CLONE_PARENT_SETTID |
+                               CLONE_SETTLS | CLONE_PARENT_SETTID |
                                CLONE_CHILD_CLEARTID) as u32,
                               |filter| filter.allow_this_syscall())
         });
 
         // Only allow the POSIX values for `madvise`.
         filter.if_syscall_is(NR_madvise, |filter| {
-            for mode in [
-                MADV_NORMAL,
-                MADV_RANDOM,
-                MADV_SEQUENTIAL,
-                MADV_WILLNEED,
-                MADV_DONTNEED
-            ].iter() {
+            for mode in [MADV_NORMAL, MADV_RANDOM, MADV_SEQUENTIAL, MADV_WILLNEED, MADV_DONTNEED]
+                            .iter() {
                 filter.if_arg2_is(*mode, |filter| filter.allow_this_syscall())
             }
         });
@@ -329,9 +306,7 @@ impl Filter {
     pub fn dump(&self) {
         let path = CString::from_slice(b"/tmp/gaol-bpf.XXXXXX");
         let mut path = path.as_bytes_with_nul().to_vec();
-        let fd = unsafe {
-            mkstemp(path.as_mut_ptr() as *mut c_char)
-        };
+        let fd = unsafe { mkstemp(path.as_mut_ptr() as *mut c_char) };
         let nbytes = self.program.len() * mem::size_of::<sock_filter>();
         unsafe {
             assert!(libc::write(fd, self.program.as_ptr() as *const c_void, nbytes as u64) ==
@@ -345,11 +320,11 @@ impl Filter {
 
     /// Activates this filter, applying all of its restrictions forevermore. This can only be done
     /// once.
-    pub fn activate(&self) -> Result<(),c_int> {
+    pub fn activate(&self) -> Result<(), c_int> {
         unsafe {
             let result = prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
             if result != 0 {
-                return Err(result)
+                return Err(result);
             }
 
             let program = sock_fprog {
@@ -379,32 +354,44 @@ impl Filter {
         }
     }
 
-    fn if_syscall_is<F>(&mut self, number: u32, then: F) where F: FnMut(&mut Filter) {
+    fn if_syscall_is<F>(&mut self, number: u32, then: F)
+        where F: FnMut(&mut Filter)
+    {
         self.program.push(EXAMINE_SYSCALL);
         self.if_k_is(number, then)
     }
 
-    fn if_arg0_is<F>(&mut self, value: u32, then: F) where F: FnMut(&mut Filter) {
+    fn if_arg0_is<F>(&mut self, value: u32, then: F)
+        where F: FnMut(&mut Filter)
+    {
         self.program.push(EXAMINE_ARG_0);
         self.if_k_is(value, then)
     }
 
-    fn if_arg1_is<F>(&mut self, value: u32, then: F) where F: FnMut(&mut Filter) {
+    fn if_arg1_is<F>(&mut self, value: u32, then: F)
+        where F: FnMut(&mut Filter)
+    {
         self.program.push(EXAMINE_ARG_1);
         self.if_k_is(value, then)
     }
 
-    fn if_arg1_hasnt_set<F>(&mut self, value: u32, then: F) where F: FnMut(&mut Filter) {
+    fn if_arg1_hasnt_set<F>(&mut self, value: u32, then: F)
+        where F: FnMut(&mut Filter)
+    {
         self.program.push(EXAMINE_ARG_1);
         self.if_k_hasnt_set(value, then)
     }
 
-    fn if_arg2_is<F>(&mut self, value: u32, then: F) where F: FnMut(&mut Filter) {
+    fn if_arg2_is<F>(&mut self, value: u32, then: F)
+        where F: FnMut(&mut Filter)
+    {
         self.program.push(EXAMINE_ARG_2);
         self.if_k_is(value, then)
     }
 
-    fn if_k_is<F>(&mut self, value: u32, mut then: F) where F: FnMut(&mut Filter) {
+    fn if_k_is<F>(&mut self, value: u32, mut then: F)
+        where F: FnMut(&mut Filter)
+    {
         let index = self.program.len();
         self.program.push(sock_filter {
             code: JMP + JEQ + K,
@@ -416,7 +403,9 @@ impl Filter {
         self.program[index].jf = (self.program.len() - index - 1) as u8;
     }
 
-    fn if_k_hasnt_set<F>(&mut self, value: u32, mut then: F) where F: FnMut(&mut Filter) {
+    fn if_k_hasnt_set<F>(&mut self, value: u32, mut then: F)
+        where F: FnMut(&mut Filter)
+    {
         let index = self.program.len();
         self.program.push(sock_filter {
             code: JMP + JSET + K,
@@ -446,9 +435,12 @@ struct sock_fprog {
 }
 
 #[allow(dead_code)]
-extern {
+extern "C" {
     fn mkstemp(template: *mut c_char) -> c_int;
-    pub fn prctl(option: c_int, arg2: c_ulong, arg3: c_ulong, arg4: c_ulong, arg5: c_ulong)
+    pub fn prctl(option: c_int,
+                 arg2: c_ulong,
+                 arg3: c_ulong,
+                 arg4: c_ulong,
+                 arg5: c_ulong)
                  -> c_int;
 }
-

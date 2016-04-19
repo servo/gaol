@@ -15,17 +15,15 @@ use platform::linux::seccomp;
 use libc::{self, EPERM, c_int, mode_t};
 use std::io;
 
-pub fn activate() -> Result<(),c_int> {
+pub fn activate() -> Result<(), c_int> {
     // Disable writing by setting the write limit to zero.
     let rlimit = rlimit {
         rlim_cur: 0,
         rlim_max: 0,
     };
-    let result = unsafe {
-         setrlimit(RLIMIT_FSIZE, &rlimit)
-    };
+    let result = unsafe { setrlimit(RLIMIT_FSIZE, &rlimit) };
     if result != 0 {
-        return Err(result)
+        return Err(result);
     }
 
     // Set a restrictive `umask` so that even if files happened to get written it'd be hard to do
@@ -35,11 +33,9 @@ pub fn activate() -> Result<(),c_int> {
     }
 
     // Disable core dumps and debugging via `PTRACE_ATTACH`.
-    let result = unsafe {
-        seccomp::prctl(PR_SET_DUMPABLE, 0, 0, 0, 0)
-    };
+    let result = unsafe { seccomp::prctl(PR_SET_DUMPABLE, 0, 0, 0, 0) };
     if result != 0 {
-        return Err(result)
+        return Err(result);
     }
 
     // Enter a new session group. (This can fail with -EPERM if we're already the session leader,
@@ -48,15 +44,13 @@ pub fn activate() -> Result<(),c_int> {
         if libc::setsid() < 0 {
             let result = io::Error::last_os_error().raw_os_error().unwrap() as i32;
             if result != EPERM {
-                return Err(result)
+                return Err(result);
             }
         }
     }
 
     // Clear out the process environment.
-    let result = unsafe {
-        clearenv()
-    };
+    let result = unsafe { clearenv() };
     if result == 0 {
         Ok(())
     } else {
@@ -78,9 +72,8 @@ const PR_SET_DUMPABLE: c_int = 4;
 
 const RLIMIT_FSIZE: c_int = 1;
 
-extern {
+extern "C" {
     fn clearenv() -> c_int;
     fn setrlimit(resource: c_int, rlim: *const rlimit) -> c_int;
     fn umask(mask: mode_t) -> mode_t;
 }
-

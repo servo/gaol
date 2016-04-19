@@ -13,7 +13,7 @@
 use platform::linux::seccomp;
 use platform::unix::process::Process;
 use platform::unix;
-use profile::{Operation, PathPattern, Profile}; 
+use profile::{Operation, PathPattern, Profile};
 use sandbox::Command;
 
 use libc::{self, c_char, c_int, c_ulong, c_void, gid_t, pid_t, size_t, ssize_t, uid_t};
@@ -28,7 +28,7 @@ use std::path::{Path, PathBuf};
 use std::ptr;
 
 /// Creates a namespace and sets up a chroot jail.
-pub fn activate(profile: &Profile) -> Result<(),c_int> {
+pub fn activate(profile: &Profile) -> Result<(), c_int> {
     let jail = try!(ChrootJail::new(profile));
     try!(jail.enter());
     drop_capabilities()
@@ -41,24 +41,23 @@ struct ChrootJail {
 
 impl ChrootJail {
     /// Creates a new `chroot` jail.
-    fn new(profile: &Profile) -> Result<ChrootJail,c_int> {
+    fn new(profile: &Profile) -> Result<ChrootJail, c_int> {
         let prefix = CString::new("/tmp/gaol.XXXXXX").unwrap();
         let mut prefix: Vec<u8> = prefix.as_bytes_with_nul().iter().map(|x| *x).collect();
         unsafe {
             if mkdtemp(prefix.as_mut_ptr() as *mut c_char).is_null() {
-                return Err(-1)
+                return Err(-1);
             }
         }
         let jail_dir = PathBuf::from(OsStr::from_bytes(&prefix[..prefix.len() - 1]));
-        let jail = ChrootJail {
-            directory: jail_dir,
-        };
+        let jail = ChrootJail { directory: jail_dir };
 
         let dest = CString::new(jail.directory
                                     .as_os_str()
                                     .to_str()
                                     .unwrap()
-                                    .as_bytes()).unwrap();
+                                    .as_bytes())
+                       .unwrap();
         let tmpfs = CString::new("tmpfs").unwrap();
         let result = unsafe {
             mount(tmpfs.as_ptr(),
@@ -68,7 +67,7 @@ impl ChrootJail {
                   ptr::null())
         };
         if result != 0 {
-            return Err(result)
+            return Err(result);
         }
 
         for operation in profile.allowed_operations().iter() {
@@ -85,17 +84,16 @@ impl ChrootJail {
     }
 
     /// Enters the `chroot` jail.
-    fn enter(&self) -> Result<(),c_int> {
+    fn enter(&self) -> Result<(), c_int> {
         let directory = CString::new(self.directory
                                          .as_os_str()
                                          .to_str()
                                          .unwrap()
-                                         .as_bytes()).unwrap();
-        let result = unsafe {
-            chroot(directory.as_ptr())
-        };
+                                         .as_bytes())
+                            .unwrap();
+        let result = unsafe { chroot(directory.as_ptr()) };
         if result != 0 {
-            return Err(result)
+            return Err(result);
         }
 
         match env::set_current_dir(&Path::new(".")) {
@@ -105,18 +103,20 @@ impl ChrootJail {
     }
 
     /// Bind mounts a path into our chroot jail.
-    fn bind_mount(&self, source_path: &Path) -> Result<(),c_int> {
+    fn bind_mount(&self, source_path: &Path) -> Result<(), c_int> {
         // Create all intermediate directories.
         let mut destination_path = self.directory.clone();
-        let mut components: Vec<OsString> =
-            source_path.components().skip(1)
-                                    .map(|component| component.as_os_str().to_os_string())
-                                    .collect();
+        let mut components: Vec<OsString> = source_path.components()
+                                                       .skip(1)
+                                                       .map(|component| {
+                                                           component.as_os_str().to_os_string()
+                                                       })
+                                                       .collect();
         let last_component = components.pop();
         for component in components.into_iter() {
             destination_path.push(component);
             if fs::create_dir(&destination_path).is_err() {
-                return Err(-1)
+                return Err(-1);
             }
         }
 
@@ -126,17 +126,17 @@ impl ChrootJail {
             match fs::metadata(source_path) {
                 Ok(ref metadata) if metadata.is_dir() => {
                     if fs::create_dir(&destination_path).is_err() {
-                        return Err(-1)
+                        return Err(-1);
                     }
                 }
                 Ok(_) => {
                     if File::create(&destination_path).is_err() {
-                        return Err(-1)
+                        return Err(-1);
                     }
                 }
                 Err(_) => {
                     // The source directory didn't exist. Just don't create the bind mount.
-                    return Ok(())
+                    return Ok(());
                 }
             }
         }
@@ -145,11 +145,13 @@ impl ChrootJail {
         let source_path = CString::new(source_path.as_os_str()
                                                   .to_str()
                                                   .unwrap()
-                                                  .as_bytes()).unwrap();
+                                                  .as_bytes())
+                              .unwrap();
         let destination_path = CString::new(destination_path.as_os_str()
                                                             .to_str()
                                                             .unwrap()
-                                                            .as_bytes()).unwrap();
+                                                            .as_bytes())
+                                   .unwrap();
         let bind = CString::new("bind").unwrap();
         let result = unsafe {
             mount(source_path.as_ptr(),
@@ -168,17 +170,20 @@ impl ChrootJail {
 
 /// Removes fake-superuser capabilities. This removes our ability to mess with the filesystem view
 /// we've set up.
-fn drop_capabilities() -> Result<(),c_int> {
+fn drop_capabilities() -> Result<(), c_int> {
     let capability_data: Vec<_> = iter::repeat(__user_cap_data_struct {
-        effective: 0,
-        permitted: 0,
-        inheritable: 0,
-    }).take(_LINUX_CAPABILITY_U32S_3 as usize).collect();
+                                      effective: 0,
+                                      permitted: 0,
+                                      inheritable: 0,
+                                  })
+                                      .take(_LINUX_CAPABILITY_U32S_3 as usize)
+                                      .collect();
     let result = unsafe {
         capset(&__user_cap_header_struct {
-            version: _LINUX_CAPABILITY_VERSION_3,
-            pid: 0,
-        }, capability_data.as_ptr())
+                   version: _LINUX_CAPABILITY_VERSION_3,
+                   pid: 0,
+               },
+               capability_data.as_ptr())
     };
     if result == 0 {
         Ok(())
@@ -208,9 +213,7 @@ unsafe fn prepare_user_and_pid_namespaces(parent_uid: uid_t, parent_gid: gid_t) 
 pub fn start(profile: &Profile, command: &mut Command) -> io::Result<Process> {
     // Store our root namespace UID and GID because they're going to change once we enter a user
     // namespace.
-    let (parent_uid, parent_gid) = unsafe {
-        (libc::getuid(), libc::getgid())
-    };
+    let (parent_uid, parent_gid) = unsafe { (libc::getuid(), libc::getgid()) };
 
     // Always create an IPC namespace, a mount namespace, and a UTS namespace. Additionally, if we
     // aren't allowing network operations, create a network namespace.
@@ -257,7 +260,7 @@ pub fn start(profile: &Profile, command: &mut Command) -> io::Result<Process> {
                     assert!(libc::write(pipe_fds[1],
                                         &grandchild_pid as *const pid_t as *const c_void,
                                         mem::size_of::<pid_t>() as size_t) ==
-                                            mem::size_of::<pid_t>() as ssize_t);
+                            mem::size_of::<pid_t>() as ssize_t);
                     libc::exit(0);
                 }
             }
@@ -272,9 +275,7 @@ pub fn start(profile: &Profile, command: &mut Command) -> io::Result<Process> {
                            &mut grandchild_pid as *mut i32 as *mut c_void,
                            mem::size_of::<pid_t>() as size_t) ==
                 mem::size_of::<pid_t>() as ssize_t);
-        Ok(Process {
-            pid: grandchild_pid,
-        })
+        Ok(Process { pid: grandchild_pid })
     }
 }
 
@@ -329,7 +330,7 @@ const _LINUX_CAPABILITY_U32S_3: u32 = 2;
 
 const PR_SET_CHILD_SUBREAPER: c_int = 36;
 
-extern {
+extern "C" {
     fn abort() -> !;
     fn capset(hdrp: cap_user_header_t, datap: const_cap_user_data_t) -> c_int;
     fn chroot(path: *const c_char) -> c_int;
@@ -343,4 +344,3 @@ extern {
              -> c_int;
     fn unshare(flags: c_int) -> c_int;
 }
-

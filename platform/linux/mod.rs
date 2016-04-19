@@ -47,9 +47,7 @@ pub struct Sandbox {
 
 impl Sandbox {
     pub fn new(profile: Profile) -> Sandbox {
-        Sandbox {
-            profile: profile,
-        }
+        Sandbox { profile: profile }
     }
 
     #[cfg(dump_bpf_sockets)]
@@ -79,19 +77,17 @@ pub struct ChildSandbox {
 
 impl ChildSandbox {
     pub fn new(profile: Profile) -> ChildSandbox {
-        ChildSandbox {
-            profile: profile,
-        }
+        ChildSandbox { profile: profile }
     }
 }
 
 impl ChildSandboxMethods for ChildSandbox {
-    fn activate(&self) -> Result<(),()> {
+    fn activate(&self) -> Result<(), ()> {
         if namespace::activate(&self.profile).is_err() {
-            return Err(())
+            return Err(());
         }
         if misc::activate().is_err() {
-            return Err(())
+            return Err(());
         }
         match Filter::new(&self.profile).activate() {
             Ok(_) => Ok(()),
@@ -99,4 +95,3 @@ impl ChildSandboxMethods for ChildSandbox {
         }
     }
 }
-

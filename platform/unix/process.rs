@@ -25,13 +25,15 @@ pub fn exec(command: &Command) -> io::Error {
     }
     args.push(ptr::null());
 
-    let env: Vec<_> =
-        command.env.iter().map(|(key, value)| {
-            let entry = format!("{}={}",
-                                str::from_utf8(key.to_bytes()).unwrap(),
-                                str::from_utf8(value.to_bytes()).unwrap());
-            CString::new(entry).unwrap()
-        }).collect();
+    let env: Vec<_> = command.env
+                             .iter()
+                             .map(|(key, value)| {
+                                 let entry = format!("{}={}",
+                                                     str::from_utf8(key.to_bytes()).unwrap(),
+                                                     str::from_utf8(value.to_bytes()).unwrap());
+                                 CString::new(entry).unwrap()
+                             })
+                             .collect();
     let mut env: Vec<_> = env.iter().map(|entry| entry.as_ptr()).collect();
     env.push(ptr::null());
 
@@ -49,11 +51,7 @@ pub fn spawn(command: &Command) -> io::Result<Process> {
                 drop(exec(command));
                 panic!()
             }
-            pid => {
-                Ok(Process {
-                    pid: pid,
-                })
-            }
+            pid => Ok(Process { pid: pid }),
         }
     }
 }
@@ -67,14 +65,12 @@ impl Process {
     pub fn wait(&self) -> io::Result<ExitStatus> {
         let mut stat = 0;
         loop {
-            let pid = unsafe {
-                waitpid(-1, &mut stat, 0)
-            };
+            let pid = unsafe { waitpid(-1, &mut stat, 0) };
             if pid < 0 {
-                return Err(io::Error::last_os_error())
+                return Err(io::Error::last_os_error());
             }
             if pid == self.pid {
-                break
+                break;
             }
         }
 
@@ -116,10 +112,11 @@ fn WTERMSIG(stat: c_int) -> u8 {
     (stat & 0o177) as u8
 }
 
-extern {
+extern "C" {
     fn fork() -> pid_t;
-    fn execve(path: *const c_char, argv: *const *const c_char, envp: *const *const c_char)
+    fn execve(path: *const c_char,
+              argv: *const *const c_char,
+              envp: *const *const c_char)
               -> c_int;
     fn waitpid(pid: pid_t, stat_loc: *mut c_int, options: c_int) -> pid_t;
 }
-

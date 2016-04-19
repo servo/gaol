@@ -55,9 +55,7 @@ pub struct Sandbox {
 
 impl Sandbox {
     pub fn new(profile: Profile) -> Sandbox {
-        Sandbox {
-            profile: profile,
-        }
+        Sandbox { profile: profile }
     }
 }
 
@@ -77,14 +75,12 @@ pub struct ChildSandbox {
 
 impl ChildSandbox {
     pub fn new(profile: Profile) -> ChildSandbox {
-        ChildSandbox {
-            profile: profile,
-        }
+        ChildSandbox { profile: profile }
     }
 }
 
 impl ChildSandboxMethods for ChildSandbox {
-    fn activate(&self) -> Result<(),()> {
+    fn activate(&self) -> Result<(), ()> {
         let mut sandbox_profile = Vec::new();
         sandbox_profile.write_all(SANDBOX_PROFILE_PROLOGUE).unwrap();
         for operation in self.profile.allowed_operations().iter() {
@@ -157,7 +153,8 @@ fn write_file_pattern(sandbox_profile: &mut Vec<u8>, path_pattern: &PathPattern)
 }
 
 fn write_path(sandbox_profile: &mut Vec<u8>, path: &Path) {
-    write_quoted_string(sandbox_profile, path.as_os_str().to_str().unwrap().as_bytes())
+    write_quoted_string(sandbox_profile,
+                        path.as_os_str().to_str().unwrap().as_bytes())
 }
 
 fn write_quoted_string(sandbox_profile: &mut Vec<u8>, string: &[u8]) {
@@ -173,8 +170,7 @@ fn write_quoted_string(sandbox_profile: &mut Vec<u8>, string: &[u8]) {
     sandbox_profile.write_all(&[b'"']).unwrap()
 }
 
-extern {
+extern "C" {
     fn sandbox_init(profile: *const c_char, flags: u64, errorbuf: *mut *mut c_char) -> c_int;
     fn sandbox_free_error(errorbuf: *mut c_char);
 }
-

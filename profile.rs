@@ -127,17 +127,16 @@ impl Profile {
     /// be allowed and modify the set of allowed operations as necessary. We are deliberately
     /// strict here to reduce the probability of applications accidentally allowing operations due
     /// to platform limitations.
-    pub fn new(allowed_operations: Vec<Operation>) -> Result<Profile,()> {
+    pub fn new(allowed_operations: Vec<Operation>) -> Result<Profile, ()> {
         if allowed_operations.iter().all(|operation| {
             match operation.support() {
-                OperationSupportLevel::NeverAllowed | OperationSupportLevel::CanBeAllowed => true,
+                OperationSupportLevel::NeverAllowed |
+                OperationSupportLevel::CanBeAllowed => true,
                 OperationSupportLevel::CannotBeAllowedPrecisely |
                 OperationSupportLevel::AlwaysAllowed => false,
             }
         }) {
-            Ok(Profile {
-                allowed_operations: allowed_operations,
-            })
+            Ok(Profile { allowed_operations: allowed_operations })
         } else {
             Err(())
         }
@@ -172,4 +171,3 @@ pub trait OperationSupport {
     /// this platform.
     fn support(&self) -> OperationSupportLevel;
 }
-
