@@ -11,8 +11,3 @@ rust:
 os:
   - linux
   - osx
-
-script:
-  - cargo build
-  # https://github.com/servo/gaol/issues/18
-  - cargo test --no-run
