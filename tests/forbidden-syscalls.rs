@@ -12,6 +12,7 @@ use std::env;
 #[cfg(target_os="linux")]
 use gaol::platform::linux::seccomp::ALLOWED_SYSCALLS;
 
+const NR_madvise: u32 = 28;
 const MAX_SYSCALL: u32 = 320;
 
 fn profile() -> Profile {
@@ -33,7 +34,7 @@ pub fn main() {
     }
 
     for syscall in 0..MAX_SYSCALL {
-        if ALLOWED_SYSCALLS.iter().any(|number| *number == syscall) {
+        if ALLOWED_SYSCALLS.iter().any(|number| *number == syscall) || syscall == NR_madvise {
             continue
         }
         let arg = format!("{}", syscall);
