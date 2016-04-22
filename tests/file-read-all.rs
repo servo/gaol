@@ -40,7 +40,7 @@ fn allowance_test() {
 fn prohibition_test() {
     let path = PathBuf::from(env::var("GAOL_TEMP_FILE").unwrap());
     ChildSandbox::new(prohibition_profile()).activate().unwrap();
-    drop(File::open(&path).unwrap())
+    drop(File::open(&path).expect("This should panic"))
 }
 
 pub fn main() {
