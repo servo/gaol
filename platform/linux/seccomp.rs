@@ -21,8 +21,10 @@ use platform::linux::namespace::{CLONE_PARENT_SETTID, CLONE_SETTLS, CLONE_SIGHAN
 use platform::linux::namespace::{CLONE_THREAD, CLONE_VM};
 use profile::{Operation, Profile};
 
-use libc::{self, AF_INET, AF_INET6, AF_UNIX, O_NONBLOCK, O_RDONLY, c_char, c_int, c_ulong};
-use libc::{c_ushort, c_void};
+use libc::{self, AF_INET, AF_INET6, AF_UNIX, AF_NETLINK};
+use libc::{c_char, c_int, c_ulong, c_ushort, c_void};
+use libc::{O_NONBLOCK, O_RDONLY, O_NOCTTY, O_CLOEXEC, FIONREAD, FIOCLEX};
+use libc::{MADV_NORMAL, MADV_RANDOM, MADV_SEQUENTIAL, MADV_WILLNEED, MADV_DONTNEED};
 use std::ffi::CString;
 use std::mem;
 
@@ -60,21 +62,7 @@ const ARG_0_OFFSET: u32 = 16;
 const ARG_1_OFFSET: u32 = 24;
 const ARG_2_OFFSET: u32 = 32;
 
-const AF_NETLINK: c_int = 16;
-
-const O_NOCTTY: c_int = 256;
-const O_CLOEXEC: c_int = 524288;
-
-const FIONREAD: c_int = 0x541b;
-const FIOCLEX: c_int = 0x5451;
-
 const NETLINK_ROUTE: c_int = 0;
-
-const MADV_NORMAL: u32 = 0;
-const MADV_RANDOM: u32 = 1;
-const MADV_SEQUENTIAL: u32 = 2;
-const MADV_WILLNEED: u32 = 3;
-const MADV_DONTNEED: u32 = 4;
 
 const NR_read: u32 = 0;
 const NR_write: u32 = 1;
@@ -316,7 +304,7 @@ impl Filter {
                 MADV_WILLNEED,
                 MADV_DONTNEED
             ].iter() {
-                filter.if_arg2_is(*mode, |filter| filter.allow_this_syscall())
+                filter.if_arg2_is(*mode as u32, |filter| filter.allow_this_syscall())
             }
         });
 
