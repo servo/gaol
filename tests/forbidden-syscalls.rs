@@ -22,7 +22,7 @@ fn profile() -> Profile {
 fn test_syscall(number: c_int) {
     ChildSandbox::new(profile()).activate().unwrap();
     unsafe {
-        syscall(number);
+        syscall(number, -1, -1, -1, -1, -1, -1);
     }
 }
 
