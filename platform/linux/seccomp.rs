@@ -40,6 +40,12 @@ const ARCH_NR: u32 = AUDIT_ARCH_ARM;
 /// The architecture number for ARM 64-bit.
 #[cfg(target_arch="aarch64")]
 const ARCH_NR: u32 = AUDIT_ARCH_AARCH64;
+#[cfg(target_arch="powerpc")]
+const ARCH_NR: u32 = AUDIT_ARCH_PPC;
+#[cfg(all(target_arch="powerpc64", target_endian="big"))]
+const ARCH_NR: u32 = AUDIT_ARCH_PPC64;
+#[cfg(all(target_arch="powerpc64", target_endian="little"))]
+const ARCH_NR: u32 = AUDIT_ARCH_PPC64LE;
 
 const SECCOMP_RET_KILL: u32 = 0;
 const SECCOMP_RET_ALLOW: u32 = 0x7fff_0000;
@@ -100,6 +106,8 @@ const NR_sendmmsg: u32 = 307;
 const NR_getrandom: u32 = 318;
 
 const EM_386: u32 = 3;
+const EM_PPC: u32 = 20;
+const EM_PPC64: u32 = 21;
 const EM_ARM: u32 = 40;
 const EM_X86_64: u32 = 62;
 const EM_AARCH64: u32 = 183;
@@ -116,6 +124,12 @@ const AUDIT_ARCH_X86_64: u32 = EM_X86_64 | __AUDIT_ARCH_64BIT | __AUDIT_ARCH_LE;
 const AUDIT_ARCH_ARM: u32 = EM_ARM | __AUDIT_ARCH_LE;
 /// The architecture number for ARM 64-bit.
 const AUDIT_ARCH_AARCH64: u32 = EM_AARCH64 | __AUDIT_ARCH_64BIT | __AUDIT_ARCH_LE;
+/// The architecture number for ppc.
+const AUDIT_ARCH_PPC: u32 = EM_PPC;
+/// The architecture number for ppc64.
+const AUDIT_ARCH_PPC64: u32 = EM_PPC64 | __AUDIT_ARCH_64BIT;
+/// The architecture number for ppc64le.
+const AUDIT_ARCH_PPC64LE: u32 = EM_PPC64 | __AUDIT_ARCH_64BIT | __AUDIT_ARCH_LE;
 
 const PR_SET_SECCOMP: c_int = 22;
 const PR_SET_NO_NEW_PRIVS: c_int = 38;
