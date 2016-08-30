@@ -12,7 +12,7 @@ use std::env;
 #[cfg(target_os="linux")]
 use gaol::platform::linux::seccomp::ALLOWED_SYSCALLS;
 
-const MAX_SYSCALL: u32 = 320;
+const MAX_SYSCALL: u32 = 400;
 
 fn profile() -> Profile {
     Profile::new(Vec::new()).unwrap()
