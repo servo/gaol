@@ -17,6 +17,8 @@ use profile::{Operation, PathPattern, Profile};
 use sandbox::Command;
 
 use libc::{self, c_char, c_int, c_ulong, c_void, gid_t, pid_t, size_t, ssize_t, uid_t};
+use libc::dup2;
+use libc::{STDIN_FILENO, STDOUT_FILENO};
 use std::env;
 use std::ffi::{CString, OsStr, OsString};
 use std::fs::{self, File};
@@ -26,6 +28,7 @@ use std::mem;
 use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::ptr;
+use std::os::unix::io::FromRawFd;
 
 /// Creates a namespace and sets up a chroot jail.
 pub fn activate(profile: &Profile) -> Result<(),c_int> {
@@ -227,11 +230,17 @@ pub fn start(profile: &Profile, command: &mut Command) -> io::Result<Process> {
     unsafe {
         // Create a pipe so we can communicate the PID of our grandchild back.
         let mut pipe_fds = [0, 0];
-        assert!(libc::pipe(&mut pipe_fds[0]) == 0);
+        assert_eq!(libc::pipe(&mut pipe_fds[0]), 0);
+
+        // Create two other pipes for stdin and stdout
+        let mut io1_fds = [0, 0];
+        let mut io2_fds = [0, 0];
+        assert_eq!(libc::pipe(&mut io1_fds[0]), 0);
+        assert_eq!(libc::pipe(&mut io2_fds[0]), 0);
 
         // Set this `prctl` flag so that we can wait on our grandchild. (Otherwise it'll be
         // reparented to init.)
-        assert!(seccomp::prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) == 0);
+        assert_eq!(seccomp::prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0), 0);
 
         // Fork so that we can unshare without removing our ability to create threads.
         if fork() == 0 {
@@ -246,7 +255,16 @@ pub fn start(profile: &Profile, command: &mut Command) -> io::Result<Process> {
             match fork() {
                 0 => {
                     // Enter the auxiliary namespaces.
-                    assert!(unshare(unshare_flags) == 0);
+                    assert_eq!(unshare(unshare_flags), 0);
+
+	            assert_eq!(libc::close(io1_fds[1]), 0);
+	            assert_eq!(libc::close(io2_fds[0]), 0);
+
+		    assert_eq!(dup2(io1_fds[0], STDIN_FILENO), STDIN_FILENO);
+		    assert_eq!(libc::close(io1_fds[0]), 0);
+
+		    assert_eq!(dup2(io2_fds[1], STDOUT_FILENO), STDOUT_FILENO);
+	            assert_eq!(libc::close(io2_fds[1]), 0);
 
                     // Go ahead and start the command.
                     drop(unix::process::exec(command));
@@ -266,6 +284,9 @@ pub fn start(profile: &Profile, command: &mut Command) -> io::Result<Process> {
         // Grandparent execution continues here. First, close the writing end of the pipe.
         libc::close(pipe_fds[1]);
 
+        libc::close(io1_fds[0]);
+        libc::close(io2_fds[1]);
+
         // Retrieve our grandchild's PID.
         let mut grandchild_pid: pid_t = 0;
         assert!(libc::read(pipe_fds[0],
@@ -274,6 +295,8 @@ pub fn start(profile: &Profile, command: &mut Command) -> io::Result<Process> {
                 mem::size_of::<pid_t>() as ssize_t);
         Ok(Process {
             pid: grandchild_pid,
+            stdin: File::from_raw_fd(io1_fds[1]),
+            stdout: File::from_raw_fd(io2_fds[0]),
         })
     }
 }
