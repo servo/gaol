@@ -5,6 +5,7 @@ authors = ["The Servo Project Developers"]
 license = "MIT OR Apache-2.0"
 documentation = "https://docs.rs/gaol"
 repository = "https://github.com/servo/gaol"
+description = "OS-level application sandboxing library"
 
 [lib]
 name = "gaol"
