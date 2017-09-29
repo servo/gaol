@@ -247,6 +247,23 @@ unsafe fn handle_error<T>(result: io::Result<T>, pipe: RawFd) -> T {
     }
 }
 
+/// Make all soft limits hard limits so the sandboxed child cannot increase them.
+fn harden_limits() -> io::Result<()> {
+    for resource in 0..libc::RLIMIT_NLIMITS {
+        let mut limit = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
+        if unsafe { libc::getrlimit(resource, &mut limit as *mut libc::rlimit) } != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if limit.rlim_cur != libc::RLIM_INFINITY && limit.rlim_max != limit.rlim_cur {
+            limit.rlim_max = limit.rlim_cur;
+            if unsafe { libc::setrlimit(resource, &limit as *const libc::rlimit) } != 0 {
+                return Err(io::Error::last_os_error());
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Spawns a child process in a new namespace.
 ///
 /// This function is quite tricky. Hic sunt dracones!
@@ -290,6 +307,8 @@ pub fn start(profile: &Profile, command: &mut Command) -> io::Result<Process> {
             }
         };
         if forked == 0 {
+            handle_error(harden_limits(), pipe_fds[1]);
+
             handle_error(command.inner.before_sandbox(&[pipe_fds[1]]), pipe_fds[1]);
             // Set up our user and PID namespaces. The PID namespace won't actually come into
             // effect until the next fork(), because PIDs are immutable.
