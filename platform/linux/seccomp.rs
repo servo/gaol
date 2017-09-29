@@ -102,14 +102,17 @@ const NR_vfork: u32 = 58;
 const NR_execve: u32 = 59;
 const NR_exit: u32 = 60;
 const NR_readlink: u32 = 89;
+const NR_getrlimit: u32 = 97;
 const NR_getuid: u32 = 102;
 const NR_sigaltstack: u32 = 131;
 const NR_arch_prctl: u32 = 158;
+const NR_setrlimit: u32 = 160;
 const NR_futex: u32 = 202;
 const NR_sched_getaffinity: u32 = 204;
 const NR_set_tid_address: u32 = 218;
 const NR_exit_group: u32 = 231;
 const NR_set_robust_list: u32 = 273;
+const NR_prlimit64: u32 = 302;
 const NR_sendmmsg: u32 = 307;
 const NR_getrandom: u32 = 318;
 const NR_execveat: u32 = 322;
@@ -162,18 +165,20 @@ static FILTER_EPILOGUE: [sock_filter; 1] = [
 ];
 
 /// Syscalls that are always allowed.
-pub static ALLOWED_SYSCALLS: [u32; 24] = [
+pub static ALLOWED_SYSCALLS: [u32; 27] = [
     NR_brk,
     NR_close,
     NR_exit,
     NR_exit_group,
     NR_futex,
     NR_getrandom,
+    NR_getrlimit,
     NR_getuid,
     NR_mmap,
     NR_mprotect,
     NR_munmap,
     NR_poll,
+    NR_prlimit64,
     NR_read,
     NR_recvfrom,
     NR_recvmsg,
@@ -185,6 +190,7 @@ pub static ALLOWED_SYSCALLS: [u32; 24] = [
     NR_sendto,
     NR_set_robust_list,
     NR_set_tid_address,
+    NR_setrlimit,
     NR_sigaltstack,
     NR_write,
 ];

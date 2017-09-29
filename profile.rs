@@ -52,6 +52,8 @@ use std::path::PathBuf;
 ///      informing the kernel that memory pages may be discarded. (It may be possible to restrict
 ///      this in future versions.)
 ///
+///    * Adjusting resource limits downward.
+///
 ///    * Spawning new threads.
 ///
 ///    * Responding to signals (e.g. `signal`, `sigaltstack`).
