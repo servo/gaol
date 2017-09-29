@@ -19,7 +19,7 @@ use std::env;
 use std::ffi::{CString, OsStr};
 use std::io;
 
-pub use platform::{ChildSandbox, Sandbox};
+pub use platform::{ChildSandbox, CommandInner, Sandbox};
 
 /// All platform-specific sandboxes implement this trait.
 ///
@@ -60,6 +60,8 @@ pub struct Command {
     pub args: Vec<CString>,
     /// The environment of the process.
     pub env: HashMap<CString,CString>,
+    /// Platform-specific inner data
+    pub(crate) inner: CommandInner,
 }
 
 impl Command {
@@ -71,6 +73,7 @@ impl Command {
             module_path: cstring(module_path),
             args: Vec::new(),
             env: HashMap::new(),
+            inner: CommandInner::new(),
         }
     }
 
@@ -99,8 +102,7 @@ impl Command {
     }
 
     /// Executes the command as a child process, which is returned.
-    pub fn spawn(&self) -> io::Result<Process> {
+    pub fn spawn(&mut self) -> io::Result<Process> {
         process::spawn(self)
     }
 }
-

@@ -23,6 +23,8 @@ pub mod platform {
     pub use platform::macos::{ChildSandbox, Operation, Sandbox};
     #[cfg(any(target_os="android", target_os="linux", target_os="macos"))]
     pub use platform::unix::process::{self, Process};
+    #[cfg(any(target_os="android", target_os="linux", target_os="macos"))]
+    pub use platform::unix::CommandInner;
 
     #[cfg(any(target_os="android", target_os="linux"))]
     pub mod linux;
@@ -31,4 +33,3 @@ pub mod platform {
     #[cfg(any(target_os="android", target_os="linux", target_os="macos"))]
     pub mod unix;
 }
-

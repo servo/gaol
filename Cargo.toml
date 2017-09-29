@@ -20,6 +20,11 @@ rand = "0.3"
 num_cpus = "1"
 
 [[test]]
+name = "before-callbacks"
+path = "tests/before-callbacks.rs"
+harness = false
+
+[[test]]
 name = "file-read-all"
 path = "tests/file-read-all.rs"
 harness = false

@@ -42,10 +42,12 @@ pub fn exec(command: &Command) -> io::Error {
     io::Error::last_os_error()
 }
 
-pub fn spawn(command: &Command) -> io::Result<Process> {
+pub fn spawn(command: &mut Command) -> io::Result<Process> {
     unsafe {
         match fork() {
             0 => {
+                drop(command.inner.before_sandbox(&[]));
+                drop(command.inner.before_exec(&[]));
                 drop(exec(command));
                 panic!()
             }
