@@ -102,11 +102,13 @@ const NR_vfork: u32 = 58;
 const NR_execve: u32 = 59;
 const NR_exit: u32 = 60;
 const NR_readlink: u32 = 89;
+const NR_gettimeofday: u32 = 96;
 const NR_getrlimit: u32 = 97;
 const NR_getuid: u32 = 102;
 const NR_sigaltstack: u32 = 131;
 const NR_arch_prctl: u32 = 158;
 const NR_setrlimit: u32 = 160;
+const NR_time: u32 = 201;
 const NR_futex: u32 = 202;
 const NR_sched_getaffinity: u32 = 204;
 const NR_set_tid_address: u32 = 218;
@@ -165,7 +167,7 @@ static FILTER_EPILOGUE: [sock_filter; 1] = [
 ];
 
 /// Syscalls that are always allowed.
-pub static ALLOWED_SYSCALLS: [u32; 27] = [
+pub static ALLOWED_SYSCALLS: [u32; 29] = [
     NR_brk,
     NR_close,
     NR_exit,
@@ -173,6 +175,7 @@ pub static ALLOWED_SYSCALLS: [u32; 27] = [
     NR_futex,
     NR_getrandom,
     NR_getrlimit,
+    NR_gettimeofday,
     NR_getuid,
     NR_mmap,
     NR_mprotect,
@@ -192,6 +195,7 @@ pub static ALLOWED_SYSCALLS: [u32; 27] = [
     NR_set_tid_address,
     NR_setrlimit,
     NR_sigaltstack,
+    NR_time,
     NR_write,
 ];
 

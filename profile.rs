@@ -54,6 +54,8 @@ use std::path::PathBuf;
 ///
 ///    * Adjusting resource limits downward.
 ///
+///    * Getting the current real time and timezone.
+///
 ///    * Spawning new threads.
 ///
 ///    * Responding to signals (e.g. `signal`, `sigaltstack`).
