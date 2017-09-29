@@ -102,6 +102,7 @@ const NR_exit: u32 = 60;
 const NR_readlink: u32 = 89;
 const NR_getuid: u32 = 102;
 const NR_sigaltstack: u32 = 131;
+const NR_arch_prctl: u32 = 158;
 const NR_futex: u32 = 202;
 const NR_sched_getaffinity: u32 = 204;
 const NR_exit_group: u32 = 231;
@@ -109,6 +110,11 @@ const NR_set_robust_list: u32 = 273;
 const NR_sendmmsg: u32 = 307;
 const NR_getrandom: u32 = 318;
 const NR_execveat: u32 = 322;
+
+const ARCH_SET_GS: u32 = 0x1001;
+const ARCH_SET_FS: u32 = 0x1002;
+const ARCH_GET_FS: u32 = 0x1003;
+const ARCH_GET_GS: u32 = 0x1004;
 
 const EM_386: u32 = 3;
 const EM_PPC: u32 = 20;
@@ -266,6 +272,14 @@ impl Filter {
             program: FILTER_PROLOGUE.iter().map(|x| *x).collect(),
         };
         filter.allow_syscalls(&ALLOWED_SYSCALLS);
+
+        // glibc uses these during startup
+        filter.if_syscall_is(NR_arch_prctl, |filter| {
+            filter.if_arg0_is(ARCH_SET_GS as u32, |filter| filter.allow_this_syscall());
+            filter.if_arg0_is(ARCH_SET_FS as u32, |filter| filter.allow_this_syscall());
+            filter.if_arg0_is(ARCH_GET_FS as u32, |filter| filter.allow_this_syscall());
+            filter.if_arg0_is(ARCH_GET_GS as u32, |filter| filter.allow_this_syscall());
+        });
 
         if profile.allowed_operations().iter().any(|operation| {
             match *operation {
