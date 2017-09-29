@@ -7,7 +7,7 @@ extern crate rand;
 
 use gaol::profile::{Operation, PathPattern, Profile};
 use gaol::sandbox::{ChildSandbox, ChildSandboxMethods, Command, Sandbox, SandboxMethods};
-use libc::c_char;
+use libc::{c_char, exit};
 use rand::Rng;
 use std::env;
 use std::ffi::{CString, OsStr};
@@ -15,6 +15,7 @@ use std::fs::File;
 use std::io::Write;
 use std::os::unix::prelude::OsStrExt;
 use std::path::PathBuf;
+use std::process;
 
 // A conservative overapproximation of `PATH_MAX` on all platforms.
 const PATH_MAX: usize = 4096;
@@ -40,7 +41,9 @@ fn allowance_test() {
 fn prohibition_test() {
     let path = PathBuf::from(env::var("GAOL_TEMP_FILE").unwrap());
     ChildSandbox::new(prohibition_profile()).activate().unwrap();
-    drop(File::open(&path).unwrap())
+    if File::open(&path).is_err() {
+        process::exit(1);
+    }
 }
 
 pub fn main() {
