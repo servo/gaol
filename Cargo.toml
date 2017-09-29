@@ -16,6 +16,9 @@ libc = "0.2"
 log = "0.3"
 rand = "0.3"
 
+[dev-dependencies]
+num_cpus = "1"
+
 [[test]]
 name = "file-read-all"
 path = "tests/file-read-all.rs"

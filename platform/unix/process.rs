@@ -68,7 +68,7 @@ impl Process {
         let mut stat = 0;
         loop {
             let pid = unsafe {
-                waitpid(-1, &mut stat, 0)
+                waitpid(self.pid, &mut stat, 0)
             };
             if pid < 0 {
                 return Err(io::Error::last_os_error())
