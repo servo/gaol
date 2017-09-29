@@ -105,6 +105,7 @@ const NR_sigaltstack: u32 = 131;
 const NR_arch_prctl: u32 = 158;
 const NR_futex: u32 = 202;
 const NR_sched_getaffinity: u32 = 204;
+const NR_set_tid_address: u32 = 218;
 const NR_exit_group: u32 = 231;
 const NR_set_robust_list: u32 = 273;
 const NR_sendmmsg: u32 = 307;
@@ -159,7 +160,7 @@ static FILTER_EPILOGUE: [sock_filter; 1] = [
 ];
 
 /// Syscalls that are always allowed.
-pub static ALLOWED_SYSCALLS: [u32; 21] = [
+pub static ALLOWED_SYSCALLS: [u32; 22] = [
     NR_brk,
     NR_close,
     NR_exit,
@@ -179,6 +180,7 @@ pub static ALLOWED_SYSCALLS: [u32; 21] = [
     NR_sendmmsg,
     NR_sendto,
     NR_set_robust_list,
+    NR_set_tid_address,
     NR_sigaltstack,
     NR_write,
 ];
