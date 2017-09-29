@@ -18,13 +18,14 @@
 
 use platform::linux::namespace::{CLONE_CHILD_CLEARTID, CLONE_FILES, CLONE_FS};
 use platform::linux::namespace::{CLONE_PARENT_SETTID, CLONE_SETTLS, CLONE_SIGHAND, CLONE_SYSVSEM};
-use platform::linux::namespace::{CLONE_THREAD, CLONE_VM};
+use platform::linux::namespace::{CLONE_THREAD, CLONE_VM, CLONE_VFORK};
 use profile::{Operation, Profile};
 
 use libc::{self, AF_INET, AF_INET6, AF_UNIX, AF_NETLINK};
 use libc::{c_char, c_int, c_ulong, c_ushort, c_void};
 use libc::{O_NONBLOCK, O_RDONLY, O_NOCTTY, O_CLOEXEC, FIONREAD, FIOCLEX};
 use libc::{MADV_NORMAL, MADV_RANDOM, MADV_SEQUENTIAL, MADV_WILLNEED, MADV_DONTNEED};
+use libc::SIGCHLD;
 use std::ffi::CString;
 use std::mem;
 
@@ -94,6 +95,9 @@ const NR_recvmsg: u32 = 47;
 const NR_bind: u32 = 49;
 const NR_getsockname: u32 = 51;
 const NR_clone: u32 = 56;
+const NR_fork: u32 = 57;
+const NR_vfork: u32 = 58;
+const NR_execve: u32 = 59;
 const NR_exit: u32 = 60;
 const NR_readlink: u32 = 89;
 const NR_getuid: u32 = 102;
@@ -104,6 +108,7 @@ const NR_exit_group: u32 = 231;
 const NR_set_robust_list: u32 = 273;
 const NR_sendmmsg: u32 = 307;
 const NR_getrandom: u32 = 318;
+const NR_execveat: u32 = 322;
 
 const EM_386: u32 = 3;
 const EM_PPC: u32 = 20;
@@ -184,6 +189,13 @@ static ALLOWED_SYSCALLS_FOR_NETWORK_OUTBOUND: [u32; 3] = [
     NR_bind,
     NR_connect,
     NR_getsockname,
+];
+
+static ALLOWED_SYSCALLS_FOR_PROCESS_CREATION: [u32; 4] = [
+    NR_fork,
+    NR_vfork,
+    NR_execve,
+    NR_execveat,
 ];
 
 const ALLOW_SYSCALL: sock_filter = sock_filter {
@@ -295,7 +307,18 @@ impl Filter {
             })
         }
 
-        // Only allow normal threads to be created.
+        let allow_process_creation = profile.allowed_operations().iter().any(|operation| {
+            match *operation {
+                Operation::CreateNewProcesses => true,
+                _ => false,
+            }
+        });
+        if allow_process_creation {
+            filter.allow_syscalls(&ALLOWED_SYSCALLS_FOR_PROCESS_CREATION);
+        }
+
+        // Only allow normal threads to be created, or vfork/fork if they
+        // are enabled.
         filter.if_syscall_is(NR_clone, |filter| {
             filter.if_arg0_is((CLONE_VM |
                                CLONE_FS |
@@ -306,7 +329,15 @@ impl Filter {
                                CLONE_SETTLS |
                                CLONE_PARENT_SETTID |
                                CLONE_CHILD_CLEARTID) as u32,
-                              |filter| filter.allow_this_syscall())
+                              |filter| filter.allow_this_syscall());
+            if allow_process_creation {
+                filter.if_arg0_is(SIGCHLD as u32,
+                                  |filter| filter.allow_this_syscall());
+                filter.if_arg0_is((CLONE_VM |
+                                   CLONE_VFORK |
+                                   SIGCHLD) as u32,
+                                  |filter| filter.allow_this_syscall());
+            }
         });
 
         // Only allow the POSIX values for `madvise`.

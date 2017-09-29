@@ -27,8 +27,6 @@ use std::path::PathBuf;
 ///
 ///    * Opening any file for writing.
 ///
-///    * Creating new processes.
-///
 ///    * Opening named pipes or System V IPC resources.
 ///
 ///    * Accessing System V semaphores.
@@ -95,6 +93,8 @@ pub enum Operation {
     NetworkOutbound(AddressPattern),
     /// System information may be read (via `sysctl` on Unix).
     SystemInfoRead,
+    /// Creating new processes (`fork`/`vfork` and `exec` on Linux).
+    CreateNewProcesses,
     /// Platform-specific operations.
     PlatformSpecific(platform::Operation),
 }
