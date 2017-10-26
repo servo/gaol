@@ -268,6 +268,10 @@ impl Filter {
                 filter.if_arg1_hasnt_set(!(O_RDONLY | O_CLOEXEC | O_NOCTTY | O_NONBLOCK) as u32,
                                          |filter| filter.allow_this_syscall())
             });
+            filter.if_syscall_is(libc::SYS_openat, |filter| {
+                filter.if_arg2_hasnt_set(!(O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOCTTY | O_NONBLOCK | O_NOFOLLOW) as u32,
+                                         |filter| filter.allow_this_syscall())
+            });
 
             // Only allow the `FIONREAD` or `FIOCLEX` `ioctl`s to be performed.
             filter.if_syscall_is(NR_ioctl, |filter| {
