@@ -20,7 +20,7 @@ use libc::{self, c_char, c_int, c_ulong, c_void, gid_t, pid_t, size_t, ssize_t, 
 use std::env;
 use std::ffi::{CString, OsStr, OsString};
 use std::fs::{self, File};
-use std::io::{self, Write};
+use std::io::{self, Error, Write};
 use std::iter;
 use std::mem;
 use std::os::unix::prelude::OsStrExt;
@@ -190,7 +190,7 @@ fn drop_capabilities() -> Result<(),c_int> {
 /// Sets up the user and PID namespaces.
 unsafe fn prepare_user_and_pid_namespaces(parent_uid: uid_t, parent_gid: gid_t) -> io::Result<()> {
     // Enter the main user and PID namespaces.
-    assert!(unshare(CLONE_NEWUSER | CLONE_NEWPID) == 0);
+    do_unshare(CLONE_NEWUSER | CLONE_NEWPID);
 
     // See http://crbug.com/457362 for more information on this.
     try!(try!(File::create(&Path::new("/proc/self/setgroups"))).write_all(b"deny"));
@@ -246,7 +246,7 @@ pub fn start(profile: &Profile, command: &mut Command) -> io::Result<Process> {
             match fork() {
                 0 => {
                     // Enter the auxiliary namespaces.
-                    assert!(unshare(unshare_flags) == 0);
+                    do_unshare(unshare_flags);
 
                     // Go ahead and start the command.
                     drop(unix::process::exec(command));
@@ -329,6 +329,12 @@ const _LINUX_CAPABILITY_U32S_3: u32 = 2;
 
 const PR_SET_CHILD_SUBREAPER: c_int = 36;
 
+unsafe fn do_unshare(flags: c_int) {
+    if unshare(flags) != 0 {
+        panic!("unshare() failed: {:?}", Error::last_os_error());
+    }
+}
+
 extern {
     fn abort() -> !;
     fn capset(hdrp: cap_user_header_t, datap: const_cap_user_data_t) -> c_int;
@@ -343,4 +349,3 @@ extern {
              -> c_int;
     fn unshare(flags: c_int) -> c_int;
 }
-
