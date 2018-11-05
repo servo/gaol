@@ -41,3 +41,8 @@ name = "system-info-read"
 path = "tests/system-info-read.rs"
 harness = false
 
+[[test]]
+name = "stdio"
+path = "tests/stdio.rs"
+harness = false
+
