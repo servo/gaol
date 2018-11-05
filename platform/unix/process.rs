@@ -42,10 +42,12 @@ pub fn exec(command: &Command) -> io::Error {
     io::Error::last_os_error()
 }
 
-pub fn spawn(command: &Command) -> io::Result<Process> {
+pub fn spawn(command: &mut Command) -> io::Result<Process> {
     unsafe {
         match fork() {
             0 => {
+                drop(command.inner.before_sandbox(&[]));
+                drop(command.inner.before_exec(&[]));
                 drop(exec(command));
                 panic!()
             }
@@ -68,7 +70,7 @@ impl Process {
         let mut stat = 0;
         loop {
             let pid = unsafe {
-                waitpid(-1, &mut stat, 0)
+                waitpid(self.pid, &mut stat, 0)
             };
             if pid < 0 {
                 return Err(io::Error::last_os_error())

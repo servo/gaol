@@ -18,13 +18,14 @@
 
 use platform::linux::namespace::{CLONE_CHILD_CLEARTID, CLONE_FILES, CLONE_FS};
 use platform::linux::namespace::{CLONE_PARENT_SETTID, CLONE_SETTLS, CLONE_SIGHAND, CLONE_SYSVSEM};
-use platform::linux::namespace::{CLONE_THREAD, CLONE_VM};
+use platform::linux::namespace::{CLONE_THREAD, CLONE_VM, CLONE_VFORK};
 use profile::{Operation, Profile};
 
 use libc::{self, AF_INET, AF_INET6, AF_UNIX, AF_NETLINK};
 use libc::{c_char, c_int, c_ulong, c_ushort, c_void};
 use libc::{O_NONBLOCK, O_RDONLY, O_NOCTTY, O_CLOEXEC, FIONREAD, FIOCLEX};
 use libc::{MADV_NORMAL, MADV_RANDOM, MADV_SEQUENTIAL, MADV_WILLNEED, MADV_DONTNEED};
+use libc::SIGCHLD;
 use std::ffi::CString;
 use std::mem;
 
@@ -82,6 +83,8 @@ const NR_mmap: u32 = 9;
 const NR_mprotect: u32 = 10;
 const NR_munmap: u32 = 11;
 const NR_brk: u32 = 12;
+const NR_rt_sigaction: u32 = 13;
+const NR_rt_sigprocmask: u32 = 14;
 const NR_rt_sigreturn: u32 = 15;
 const NR_ioctl: u32 = 16;
 const NR_access: u32 = 21;
@@ -94,16 +97,32 @@ const NR_recvmsg: u32 = 47;
 const NR_bind: u32 = 49;
 const NR_getsockname: u32 = 51;
 const NR_clone: u32 = 56;
+const NR_fork: u32 = 57;
+const NR_vfork: u32 = 58;
+const NR_execve: u32 = 59;
 const NR_exit: u32 = 60;
 const NR_readlink: u32 = 89;
+const NR_gettimeofday: u32 = 96;
+const NR_getrlimit: u32 = 97;
 const NR_getuid: u32 = 102;
 const NR_sigaltstack: u32 = 131;
+const NR_arch_prctl: u32 = 158;
+const NR_setrlimit: u32 = 160;
+const NR_time: u32 = 201;
 const NR_futex: u32 = 202;
 const NR_sched_getaffinity: u32 = 204;
+const NR_set_tid_address: u32 = 218;
 const NR_exit_group: u32 = 231;
 const NR_set_robust_list: u32 = 273;
+const NR_prlimit64: u32 = 302;
 const NR_sendmmsg: u32 = 307;
 const NR_getrandom: u32 = 318;
+const NR_execveat: u32 = 322;
+
+const ARCH_SET_GS: u32 = 0x1001;
+const ARCH_SET_FS: u32 = 0x1002;
+const ARCH_GET_FS: u32 = 0x1003;
+const ARCH_GET_GS: u32 = 0x1004;
 
 const EM_386: u32 = 3;
 const EM_PPC: u32 = 20;
@@ -148,27 +167,35 @@ static FILTER_EPILOGUE: [sock_filter; 1] = [
 ];
 
 /// Syscalls that are always allowed.
-pub static ALLOWED_SYSCALLS: [u32; 21] = [
+pub static ALLOWED_SYSCALLS: [u32; 29] = [
     NR_brk,
     NR_close,
     NR_exit,
     NR_exit_group,
     NR_futex,
     NR_getrandom,
+    NR_getrlimit,
+    NR_gettimeofday,
     NR_getuid,
     NR_mmap,
     NR_mprotect,
     NR_munmap,
     NR_poll,
+    NR_prlimit64,
     NR_read,
     NR_recvfrom,
     NR_recvmsg,
+    NR_rt_sigaction,
+    NR_rt_sigprocmask,
     NR_rt_sigreturn,
     NR_sched_getaffinity,
     NR_sendmmsg,
     NR_sendto,
     NR_set_robust_list,
+    NR_set_tid_address,
+    NR_setrlimit,
     NR_sigaltstack,
+    NR_time,
     NR_write,
 ];
 
@@ -184,6 +211,13 @@ static ALLOWED_SYSCALLS_FOR_NETWORK_OUTBOUND: [u32; 3] = [
     NR_bind,
     NR_connect,
     NR_getsockname,
+];
+
+static ALLOWED_SYSCALLS_FOR_PROCESS_CREATION: [u32; 4] = [
+    NR_fork,
+    NR_vfork,
+    NR_execve,
+    NR_execveat,
 ];
 
 const ALLOW_SYSCALL: sock_filter = sock_filter {
@@ -255,6 +289,14 @@ impl Filter {
         };
         filter.allow_syscalls(&ALLOWED_SYSCALLS);
 
+        // glibc uses these during startup
+        filter.if_syscall_is(NR_arch_prctl, |filter| {
+            filter.if_arg0_is(ARCH_SET_GS as u32, |filter| filter.allow_this_syscall());
+            filter.if_arg0_is(ARCH_SET_FS as u32, |filter| filter.allow_this_syscall());
+            filter.if_arg0_is(ARCH_GET_FS as u32, |filter| filter.allow_this_syscall());
+            filter.if_arg0_is(ARCH_GET_GS as u32, |filter| filter.allow_this_syscall());
+        });
+
         if profile.allowed_operations().iter().any(|operation| {
             match *operation {
                 Operation::FileReadAll(_) | Operation::FileReadMetadata(_) => true,
@@ -295,7 +337,18 @@ impl Filter {
             })
         }
 
-        // Only allow normal threads to be created.
+        let allow_process_creation = profile.allowed_operations().iter().any(|operation| {
+            match *operation {
+                Operation::CreateNewProcesses => true,
+                _ => false,
+            }
+        });
+        if allow_process_creation {
+            filter.allow_syscalls(&ALLOWED_SYSCALLS_FOR_PROCESS_CREATION);
+        }
+
+        // Only allow normal threads to be created, or vfork/fork if they
+        // are enabled.
         filter.if_syscall_is(NR_clone, |filter| {
             filter.if_arg0_is((CLONE_VM |
                                CLONE_FS |
@@ -306,7 +359,15 @@ impl Filter {
                                CLONE_SETTLS |
                                CLONE_PARENT_SETTID |
                                CLONE_CHILD_CLEARTID) as u32,
-                              |filter| filter.allow_this_syscall())
+                              |filter| filter.allow_this_syscall());
+            if allow_process_creation {
+                filter.if_arg0_is(SIGCHLD as u32,
+                                  |filter| filter.allow_this_syscall());
+                filter.if_arg0_is((CLONE_VM |
+                                   CLONE_VFORK |
+                                   SIGCHLD) as u32,
+                                  |filter| filter.allow_this_syscall());
+            }
         });
 
         // Only allow the POSIX values for `madvise`.

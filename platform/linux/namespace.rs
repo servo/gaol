@@ -16,13 +16,14 @@ use platform::unix;
 use profile::{Operation, PathPattern, Profile}; 
 use sandbox::Command;
 
-use libc::{self, c_char, c_int, c_ulong, c_void, gid_t, pid_t, size_t, ssize_t, uid_t};
+use libc::{self, EINVAL, O_CLOEXEC, c_char, c_int, c_ulong, c_void, gid_t, pid_t, size_t, ssize_t, uid_t};
 use std::env;
 use std::ffi::{CString, OsStr, OsString};
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::iter;
 use std::mem;
+use std::os::unix::io::RawFd;
 use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::ptr;
@@ -202,6 +203,67 @@ unsafe fn prepare_user_and_pid_namespaces(parent_uid: uid_t, parent_gid: gid_t) 
     Ok(())
 }
 
+unsafe fn fork_wrapper() -> io::Result<pid_t> {
+    let child = fork();
+    if child >= 0 {
+        Ok(child)
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+unsafe fn pipe_write(pipe: RawFd, value: i32) {
+    assert!(libc::write(pipe,
+                        &value as *const i32 as *const c_void,
+                        mem::size_of::<i32>() as size_t) == mem::size_of::<i32>() as ssize_t);
+}
+
+unsafe fn pipe_read(pipe: RawFd) -> io::Result<Vec<i32>> {
+    let mut ret = Vec::new();
+    loop {
+        let mut v: i32 = 0;
+        let bytes = libc::read(pipe,
+                               &mut v as *mut i32 as *mut c_void,
+                               mem::size_of::<i32>() as size_t);
+        if bytes == mem::size_of::<i32>() as ssize_t {
+            ret.push(v);
+        } else if bytes == 0 {
+            return Ok(ret);
+        } else if bytes > 0 {
+            panic!("No idea how we got a partial read in this pipe");
+        } else {
+            return Err(io::Error::last_os_error())
+        }
+    }
+}
+
+unsafe fn handle_error<T>(result: io::Result<T>, pipe: RawFd) -> T {
+    match result {
+        Ok(v) => v,
+        Err(e) => {
+            pipe_write(pipe, -e.raw_os_error().unwrap_or(EINVAL));
+            libc::exit(0);
+        }
+    }
+}
+
+/// Make all soft limits hard limits so the sandboxed child cannot increase them.
+fn harden_limits() -> io::Result<()> {
+    for resource in 0..libc::RLIMIT_NLIMITS {
+        let mut limit = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
+        if unsafe { libc::getrlimit(resource, &mut limit as *mut libc::rlimit) } != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if limit.rlim_cur != libc::RLIM_INFINITY && limit.rlim_max != limit.rlim_cur {
+            limit.rlim_max = limit.rlim_cur;
+            if unsafe { libc::setrlimit(resource, &limit as *const libc::rlimit) } != 0 {
+                return Err(io::Error::last_os_error());
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Spawns a child process in a new namespace.
 ///
 /// This function is quite tricky. Hic sunt dracones!
@@ -227,53 +289,77 @@ pub fn start(profile: &Profile, command: &mut Command) -> io::Result<Process> {
     unsafe {
         // Create a pipe so we can communicate the PID of our grandchild back.
         let mut pipe_fds = [0, 0];
-        assert!(libc::pipe(&mut pipe_fds[0]) == 0);
+        if libc::pipe2(&mut pipe_fds[0], O_CLOEXEC) != 0 {
+            return Err(io::Error::last_os_error());
+        }
 
         // Set this `prctl` flag so that we can wait on our grandchild. (Otherwise it'll be
         // reparented to init.)
         assert!(seccomp::prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) == 0);
 
         // Fork so that we can unshare without removing our ability to create threads.
-        if fork() == 0 {
-            // Close the reading end of the pipe.
-            libc::close(pipe_fds[0]);
+        let forked = match fork_wrapper() {
+            Ok(pid) => pid,
+            Err(e) => {
+                libc::close(pipe_fds[0]);
+                libc::close(pipe_fds[1]);
+                return Err(e);
+            }
+        };
+        if forked == 0 {
+            handle_error(harden_limits(), pipe_fds[1]);
 
+            handle_error(command.inner.before_sandbox(&[pipe_fds[1]]), pipe_fds[1]);
             // Set up our user and PID namespaces. The PID namespace won't actually come into
             // effect until the next fork(), because PIDs are immutable.
-            prepare_user_and_pid_namespaces(parent_uid, parent_gid).unwrap();
+            handle_error(prepare_user_and_pid_namespaces(parent_uid, parent_gid), pipe_fds[1]);
 
             // Fork again, to enter the PID namespace.
-            match fork() {
+            match handle_error(fork_wrapper(), pipe_fds[1]) {
                 0 => {
                     // Enter the auxiliary namespaces.
-                    assert!(unshare(unshare_flags) == 0);
+                    if unshare(unshare_flags) != 0 {
+                        handle_error::<()>(Err(io::Error::last_os_error()), pipe_fds[1]);
+                    }
 
+                    handle_error(command.inner.before_exec(&[pipe_fds[1]]), pipe_fds[1]);
                     // Go ahead and start the command.
-                    drop(unix::process::exec(command));
-                    abort()
+                    handle_error::<()>(Err(unix::process::exec(command)), pipe_fds[1]);
                 }
                 grandchild_pid => {
                     // Send the PID of our child up to our parent and exit.
-                    assert!(libc::write(pipe_fds[1],
-                                        &grandchild_pid as *const pid_t as *const c_void,
-                                        mem::size_of::<pid_t>() as size_t) ==
-                                            mem::size_of::<pid_t>() as ssize_t);
+                    pipe_write(pipe_fds[1], grandchild_pid);
                     libc::exit(0);
                 }
             }
         }
 
-        // Grandparent execution continues here. First, close the writing end of the pipe.
+        // Grandparent execution continues here.
+
+        // Reap child zombie.
+        waitpid(forked, ptr::null_mut(), 0);
+
+        // Close pipe writer end now so that when the child/grandchild close
+        // theirs, we'll get EOF on reading.
         libc::close(pipe_fds[1]);
 
         // Retrieve our grandchild's PID.
-        let mut grandchild_pid: pid_t = 0;
-        assert!(libc::read(pipe_fds[0],
-                           &mut grandchild_pid as *mut i32 as *mut c_void,
-                           mem::size_of::<pid_t>() as size_t) ==
-                mem::size_of::<pid_t>() as ssize_t);
+        let pipe_vals = pipe_read(pipe_fds[0]);
+        libc::close(pipe_fds[0]);
+        let pipe_vals = pipe_vals?;
+
+        // We could get a PID followed by an error from the grandchild.
+        let grandchild_pid = pipe_vals.iter().find(|v| **v >= 0);
+        if let Some(err) = pipe_vals.iter().find(|v| **v < 0) {
+            if let Some(pid) = grandchild_pid {
+                // Reap failed grandchild zombie.
+                waitpid(*pid, ptr::null_mut(), 0);
+            }
+            return Err(io::Error::from_raw_os_error(-*err));
+        }
+
         Ok(Process {
-            pid: grandchild_pid,
+            pid: *grandchild_pid.expect("We should have something in the pipe"),
         })
     }
 }
@@ -282,6 +368,7 @@ pub const CLONE_VM: c_int = 0x0000_0100;
 pub const CLONE_FS: c_int = 0x0000_0200;
 pub const CLONE_FILES: c_int = 0x0000_0400;
 pub const CLONE_SIGHAND: c_int = 0x0000_0800;
+pub const CLONE_VFORK: c_int = 0x0000_4000;
 pub const CLONE_THREAD: c_int = 0x0001_0000;
 pub const CLONE_NEWNS: c_int = 0x0002_0000;
 pub const CLONE_SYSVSEM: c_int = 0x0004_0000;
@@ -330,7 +417,6 @@ const _LINUX_CAPABILITY_U32S_3: u32 = 2;
 const PR_SET_CHILD_SUBREAPER: c_int = 36;
 
 extern {
-    fn abort() -> !;
     fn capset(hdrp: cap_user_header_t, datap: const_cap_user_data_t) -> c_int;
     fn chroot(path: *const c_char) -> c_int;
     fn fork() -> pid_t;
@@ -341,6 +427,7 @@ extern {
              mountflags: c_ulong,
              data: *const c_void)
              -> c_int;
+    fn waitpid(pid: pid_t, stat_loc: *mut c_int, options: c_int) -> pid_t;
     fn unshare(flags: c_int) -> c_int;
 }
 

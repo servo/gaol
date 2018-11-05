@@ -27,8 +27,6 @@ use std::path::PathBuf;
 ///
 ///    * Opening any file for writing.
 ///
-///    * Creating new processes.
-///
 ///    * Opening named pipes or System V IPC resources.
 ///
 ///    * Accessing System V semaphores.
@@ -53,6 +51,10 @@ use std::path::PathBuf;
 ///    * Changing memory protection and use policies: for example, marking pages non-writable or
 ///      informing the kernel that memory pages may be discarded. (It may be possible to restrict
 ///      this in future versions.)
+///
+///    * Adjusting resource limits downward.
+///
+///    * Getting the current real time and timezone.
 ///
 ///    * Spawning new threads.
 ///
@@ -95,6 +97,8 @@ pub enum Operation {
     NetworkOutbound(AddressPattern),
     /// System information may be read (via `sysctl` on Unix).
     SystemInfoRead,
+    /// Creating new processes (`fork`/`vfork` and `exec` on Linux).
+    CreateNewProcesses,
     /// Platform-specific operations.
     PlatformSpecific(platform::Operation),
 }

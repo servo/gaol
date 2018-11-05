@@ -38,6 +38,9 @@ impl OperationSupport for profile::Operation {
             profile::Operation::PlatformSpecific(Operation::MachLookup(_)) => {
                 OperationSupportLevel::CanBeAllowed
             }
+            profile::Operation::CreateNewProcesses => {
+                OperationSupportLevel::NeverAllowed
+            }
         }
     }
 }
@@ -117,6 +120,9 @@ impl ChildSandboxMethods for ChildSandbox {
                 }
                 profile::Operation::SystemInfoRead => {
                     sandbox_profile.write_all(b"(allow sysctl-read)\n").unwrap()
+                }
+                profile::Operation::CreateNewProcesses => {
+                    unimplemented!()
                 }
                 profile::Operation::PlatformSpecific(Operation::MachLookup(ref service_name)) => {
                     sandbox_profile.write_all(b"(allow mach-lookup (global-name ").unwrap();

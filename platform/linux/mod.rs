@@ -27,7 +27,8 @@ impl OperationSupport for profile::Operation {
     fn support(&self) -> OperationSupportLevel {
         match *self {
             profile::Operation::FileReadAll(_) |
-            profile::Operation::NetworkOutbound(AddressPattern::All) => {
+            profile::Operation::NetworkOutbound(AddressPattern::All) |
+            profile::Operation::CreateNewProcesses => {
                 OperationSupportLevel::CanBeAllowed
             }
             profile::Operation::FileReadMetadata(_) |

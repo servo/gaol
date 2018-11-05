@@ -3,11 +3,13 @@
 
 extern crate gaol;
 extern crate libc;
+extern crate num_cpus;
 
 use gaol::profile::Profile;
 use gaol::sandbox::{ChildSandbox, ChildSandboxMethods, Command, Sandbox, SandboxMethods};
 use libc::c_int;
 use std::env;
+use std::thread;
 
 #[cfg(target_os="linux")]
 use gaol::platform::linux::seccomp::ALLOWED_SYSCALLS;
@@ -32,16 +34,27 @@ pub fn main() {
         return test_syscall(arg.parse().unwrap())
     }
 
-    for syscall in 0..MAX_SYSCALL {
-        if ALLOWED_SYSCALLS.iter().any(|number| *number == syscall) {
-            continue
-        }
-        let arg = format!("{}", syscall);
-        let status = Sandbox::new(profile()).start(&mut Command::me().unwrap().arg(&arg[..]))
-                                            .unwrap()
-                                            .wait()
-                                            .unwrap();
-        assert!(!status.success());
+    let num_cpus = num_cpus::get() as u32;
+    let handles = (0..num_cpus).into_iter().map(|index| {
+        thread::spawn(move || {
+            for syscall in 0..MAX_SYSCALL {
+                if (syscall % num_cpus) != index {
+                    continue
+                }
+                if ALLOWED_SYSCALLS.iter().any(|number| *number == syscall) {
+                    continue
+                }
+                let arg = format!("{}", syscall);
+                let status = Sandbox::new(profile()).start(&mut Command::me().unwrap().arg(&arg[..]))
+                                                    .unwrap()
+                                                    .wait()
+                                                    .unwrap();
+                assert!(!status.success());
+            }
+        })
+    }).collect::<Vec<_>>();
+    for h in handles {
+        h.join().unwrap();
     }
 }
 
