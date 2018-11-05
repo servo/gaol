@@ -14,7 +14,7 @@ path = "lib.rs"
 [dependencies]
 libc = "0.2"
 log = "0.4"
-rand = "0.3"
+rand = "0.5"
 
 [[test]]
 name = "file-read-all"
