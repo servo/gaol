@@ -10,19 +10,17 @@
 
 //! Sandboxing on Linux via miscellaneous kernel features.
 
-use platform::linux::seccomp;
-
-use libc::{self, EPERM, c_int, mode_t};
+use libc;
 use std::io;
 
-pub fn activate() -> Result<(),c_int> {
+pub fn activate() -> Result<(), libc::c_int> {
     // Disable writing by setting the write limit to zero.
-    let rlimit = rlimit {
+    let rlimit = libc::rlimit {
         rlim_cur: 0,
         rlim_max: 0,
     };
     let result = unsafe {
-         setrlimit(RLIMIT_FSIZE, &rlimit)
+         libc::setrlimit(libc::RLIMIT_FSIZE, &rlimit)
     };
     if result != 0 {
         return Err(result)
@@ -31,12 +29,12 @@ pub fn activate() -> Result<(),c_int> {
     // Set a restrictive `umask` so that even if files happened to get written it'd be hard to do
     // anything with them.
     unsafe {
-        umask(0);
+        libc::umask(0);
     }
 
     // Disable core dumps and debugging via `PTRACE_ATTACH`.
     let result = unsafe {
-        seccomp::prctl(PR_SET_DUMPABLE, 0, 0, 0, 0)
+        libc::prctl(libc::PR_SET_DUMPABLE, 0, 0, 0, 0)
     };
     if result != 0 {
         return Err(result)
@@ -47,7 +45,7 @@ pub fn activate() -> Result<(),c_int> {
     unsafe {
         if libc::setsid() < 0 {
             let result = io::Error::last_os_error().raw_os_error().unwrap() as i32;
-            if result != EPERM {
+            if result != libc::EPERM {
                 return Err(result)
             }
         }
@@ -55,7 +53,7 @@ pub fn activate() -> Result<(),c_int> {
 
     // Clear out the process environment.
     let result = unsafe {
-        clearenv()
+        libc::clearenv()
     };
     if result == 0 {
         Ok(())
@@ -63,24 +61,3 @@ pub fn activate() -> Result<(),c_int> {
         Err(result)
     }
 }
-
-#[repr(C)]
-#[allow(non_camel_case_types)]
-struct rlimit {
-    rlim_cur: rlim_t,
-    rlim_max: rlim_t,
-}
-
-#[allow(non_camel_case_types)]
-type rlim_t = u64;
-
-const PR_SET_DUMPABLE: c_int = 4;
-
-const RLIMIT_FSIZE: c_int = 1;
-
-extern {
-    fn clearenv() -> c_int;
-    fn setrlimit(resource: c_int, rlim: *const rlimit) -> c_int;
-    fn umask(mask: mode_t) -> mode_t;
-}
-

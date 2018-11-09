@@ -13,7 +13,7 @@
 use platform::linux::seccomp;
 use platform::unix::process::Process;
 use platform::unix;
-use profile::{Operation, PathPattern, Profile}; 
+use profile::{Operation, PathPattern, Profile};
 use sandbox::Command;
 
 use libc::{self, c_char, c_int, c_ulong, c_void, gid_t, pid_t, size_t, ssize_t, uid_t};
@@ -45,7 +45,7 @@ impl ChrootJail {
         let prefix = CString::new("/tmp/gaol.XXXXXX").unwrap();
         let mut prefix: Vec<u8> = prefix.as_bytes_with_nul().iter().map(|x| *x).collect();
         unsafe {
-            if mkdtemp(prefix.as_mut_ptr() as *mut c_char).is_null() {
+            if libc::mkdtemp(prefix.as_mut_ptr() as *mut c_char).is_null() {
                 return Err(-1)
             }
         }
@@ -61,11 +61,11 @@ impl ChrootJail {
                                     .as_bytes()).unwrap();
         let tmpfs = CString::new("tmpfs").unwrap();
         let result = unsafe {
-            mount(tmpfs.as_ptr(),
-                  dest.as_ptr(),
-                  tmpfs.as_ptr(),
-                  MS_NOATIME | MS_NODEV | MS_NOEXEC | MS_NOSUID,
-                  ptr::null())
+            libc::mount(tmpfs.as_ptr(),
+                        dest.as_ptr(),
+                        tmpfs.as_ptr(),
+                        libc::MS_NOATIME | libc::MS_NODEV | libc::MS_NOEXEC | libc::MS_NOSUID,
+                        ptr::null())
         };
         if result != 0 {
             return Err(result)
@@ -92,7 +92,7 @@ impl ChrootJail {
                                          .unwrap()
                                          .as_bytes()).unwrap();
         let result = unsafe {
-            chroot(directory.as_ptr())
+            libc::chroot(directory.as_ptr())
         };
         if result != 0 {
             return Err(result)
@@ -152,10 +152,10 @@ impl ChrootJail {
                                                             .as_bytes()).unwrap();
         let bind = CString::new("bind").unwrap();
         let result = unsafe {
-            mount(source_path.as_ptr(),
+            libc::mount(source_path.as_ptr(),
                   destination_path.as_ptr(),
                   bind.as_ptr(),
-                  MS_MGC_VAL | MS_BIND | MS_REC,
+                  libc::MS_MGC_VAL | libc::MS_BIND | libc::MS_REC,
                   ptr::null_mut())
         };
         if result == 0 {
@@ -190,7 +190,7 @@ fn drop_capabilities() -> Result<(),c_int> {
 /// Sets up the user and PID namespaces.
 unsafe fn prepare_user_and_pid_namespaces(parent_uid: uid_t, parent_gid: gid_t) -> io::Result<()> {
     // Enter the main user and PID namespaces.
-    assert!(unshare(CLONE_NEWUSER | CLONE_NEWPID) == 0);
+    assert!(libc::unshare(libc::CLONE_NEWUSER | libc::CLONE_NEWPID) == 0);
 
     // See http://crbug.com/457362 for more information on this.
     try!(try!(File::create(&Path::new("/proc/self/setgroups"))).write_all(b"deny"));
@@ -214,14 +214,14 @@ pub fn start(profile: &Profile, command: &mut Command) -> io::Result<Process> {
 
     // Always create an IPC namespace, a mount namespace, and a UTS namespace. Additionally, if we
     // aren't allowing network operations, create a network namespace.
-    let mut unshare_flags = CLONE_NEWIPC | CLONE_NEWNS | CLONE_NEWUTS;
+    let mut unshare_flags = libc::CLONE_NEWIPC | libc::CLONE_NEWNS | libc::CLONE_NEWUTS;
     if !profile.allowed_operations().iter().any(|operation| {
         match *operation {
             Operation::NetworkOutbound(_) => true,
             _ => false,
         }
     }) {
-        unshare_flags |= CLONE_NEWNET
+        unshare_flags |= libc::CLONE_NEWNET
     }
 
     unsafe {
@@ -231,10 +231,10 @@ pub fn start(profile: &Profile, command: &mut Command) -> io::Result<Process> {
 
         // Set this `prctl` flag so that we can wait on our grandchild. (Otherwise it'll be
         // reparented to init.)
-        assert!(seccomp::prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) == 0);
+        assert!(libc::prctl(libc::PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) == 0);
 
         // Fork so that we can unshare without removing our ability to create threads.
-        if fork() == 0 {
+        if libc::fork() == 0 {
             // Close the reading end of the pipe.
             libc::close(pipe_fds[0]);
 
@@ -243,14 +243,14 @@ pub fn start(profile: &Profile, command: &mut Command) -> io::Result<Process> {
             prepare_user_and_pid_namespaces(parent_uid, parent_gid).unwrap();
 
             // Fork again, to enter the PID namespace.
-            match fork() {
+            match libc::fork() {
                 0 => {
                     // Enter the auxiliary namespaces.
-                    assert!(unshare(unshare_flags) == 0);
+                    assert!(libc::unshare(unshare_flags) == 0);
 
                     // Go ahead and start the command.
                     drop(unix::process::exec(command));
-                    abort()
+                    libc::abort()
                 }
                 grandchild_pid => {
                     // Send the PID of our child up to our parent and exit.
@@ -277,31 +277,6 @@ pub fn start(profile: &Profile, command: &mut Command) -> io::Result<Process> {
         })
     }
 }
-
-pub const CLONE_VM: c_int = 0x0000_0100;
-pub const CLONE_FS: c_int = 0x0000_0200;
-pub const CLONE_FILES: c_int = 0x0000_0400;
-pub const CLONE_SIGHAND: c_int = 0x0000_0800;
-pub const CLONE_THREAD: c_int = 0x0001_0000;
-pub const CLONE_NEWNS: c_int = 0x0002_0000;
-pub const CLONE_SYSVSEM: c_int = 0x0004_0000;
-pub const CLONE_SETTLS: c_int = 0x0008_0000;
-pub const CLONE_PARENT_SETTID: c_int = 0x0010_0000;
-pub const CLONE_CHILD_CLEARTID: c_int = 0x0020_0000;
-pub const CLONE_NEWUTS: c_int = 0x0400_0000;
-pub const CLONE_NEWIPC: c_int = 0x0800_0000;
-pub const CLONE_NEWUSER: c_int = 0x1000_0000;
-pub const CLONE_NEWPID: c_int = 0x2000_0000;
-pub const CLONE_NEWNET: c_int = 0x4000_0000;
-
-const MS_NOSUID: c_ulong = 2;
-const MS_NODEV: c_ulong = 4;
-const MS_NOEXEC: c_ulong = 8;
-const MS_NOATIME: c_ulong = 1024;
-const MS_BIND: c_ulong = 4096;
-const MS_REC: c_ulong = 16384;
-const MS_MGC_VAL: c_ulong = 0xc0ed_0000;
-
 #[repr(C)]
 #[allow(non_camel_case_types)]
 struct __user_cap_header_struct {
@@ -326,21 +301,6 @@ type const_cap_user_data_t = *const __user_cap_data_struct;
 
 const _LINUX_CAPABILITY_VERSION_3: u32 = 0x20080522;
 const _LINUX_CAPABILITY_U32S_3: u32 = 2;
-
-const PR_SET_CHILD_SUBREAPER: c_int = 36;
-
 extern {
-    fn abort() -> !;
     fn capset(hdrp: cap_user_header_t, datap: const_cap_user_data_t) -> c_int;
-    fn chroot(path: *const c_char) -> c_int;
-    fn fork() -> pid_t;
-    fn mkdtemp(template: *mut c_char) -> *mut c_char;
-    fn mount(source: *const c_char,
-             target: *const c_char,
-             filesystemtype: *const c_char,
-             mountflags: c_ulong,
-             data: *const c_void)
-             -> c_int;
-    fn unshare(flags: c_int) -> c_int;
 }
-
