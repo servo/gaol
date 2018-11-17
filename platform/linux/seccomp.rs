@@ -16,12 +16,12 @@
 
 #![allow(non_upper_case_globals, unused_imports)]
 
-use platform::linux::namespace::{CLONE_CHILD_CLEARTID, CLONE_FILES, CLONE_FS};
-use platform::linux::namespace::{CLONE_PARENT_SETTID, CLONE_SETTLS, CLONE_SIGHAND, CLONE_SYSVSEM};
-use platform::linux::namespace::{CLONE_THREAD, CLONE_VM};
 use profile::{Operation, Profile};
 
-use libc::{self, AF_INET, AF_INET6, AF_UNIX, AF_NETLINK};
+use libc::{self, CLONE_CHILD_CLEARTID, CLONE_FILES, CLONE_FS,
+           CLONE_PARENT_SETTID, CLONE_SETTLS, CLONE_SIGHAND, CLONE_SYSVSEM,
+           CLONE_THREAD, CLONE_VM};
+use libc::{AF_INET, AF_INET6, AF_UNIX, AF_NETLINK};
 use libc::{c_char, c_int, c_ulong, c_ushort, c_void};
 use libc::{O_NONBLOCK, O_RDONLY, O_NOCTTY, O_CLOEXEC, FIONREAD, FIOCLEX};
 use libc::{MADV_NORMAL, MADV_RANDOM, MADV_SEQUENTIAL, MADV_WILLNEED, MADV_DONTNEED};
@@ -70,41 +70,6 @@ const ARG_2_OFFSET: u32 = 32;
 
 const NETLINK_ROUTE: c_int = 0;
 
-const NR_read: u32 = 0;
-const NR_write: u32 = 1;
-const NR_open: u32 = 2;
-const NR_close: u32 = 3;
-const NR_stat: u32 = 4;
-const NR_fstat: u32 = 5;
-const NR_poll: u32 = 7;
-const NR_lseek: u32 = 8;
-const NR_mmap: u32 = 9;
-const NR_mprotect: u32 = 10;
-const NR_munmap: u32 = 11;
-const NR_brk: u32 = 12;
-const NR_rt_sigreturn: u32 = 15;
-const NR_ioctl: u32 = 16;
-const NR_access: u32 = 21;
-const NR_madvise: u32 = 28;
-const NR_socket: u32 = 41;
-const NR_connect: u32 = 42;
-const NR_sendto: u32 = 44;
-const NR_recvfrom: u32 = 45;
-const NR_recvmsg: u32 = 47;
-const NR_bind: u32 = 49;
-const NR_getsockname: u32 = 51;
-const NR_clone: u32 = 56;
-const NR_exit: u32 = 60;
-const NR_readlink: u32 = 89;
-const NR_getuid: u32 = 102;
-const NR_sigaltstack: u32 = 131;
-const NR_futex: u32 = 202;
-const NR_sched_getaffinity: u32 = 204;
-const NR_exit_group: u32 = 231;
-const NR_set_robust_list: u32 = 273;
-const NR_sendmmsg: u32 = 307;
-const NR_getrandom: u32 = 318;
-
 const EM_386: u32 = 3;
 const EM_PPC: u32 = 20;
 const EM_PPC64: u32 = 21;
@@ -149,41 +114,41 @@ static FILTER_EPILOGUE: [sock_filter; 1] = [
 
 /// Syscalls that are always allowed.
 pub static ALLOWED_SYSCALLS: [u32; 21] = [
-    NR_brk,
-    NR_close,
-    NR_exit,
-    NR_exit_group,
-    NR_futex,
-    NR_getrandom,
-    NR_getuid,
-    NR_mmap,
-    NR_mprotect,
-    NR_munmap,
-    NR_poll,
-    NR_read,
-    NR_recvfrom,
-    NR_recvmsg,
-    NR_rt_sigreturn,
-    NR_sched_getaffinity,
-    NR_sendmmsg,
-    NR_sendto,
-    NR_set_robust_list,
-    NR_sigaltstack,
-    NR_write,
+    libc::SYS_brk as u32,
+    libc::SYS_close as u32,
+    libc::SYS_exit as u32,
+    libc::SYS_exit_group as u32,
+    libc::SYS_futex as u32,
+    libc::SYS_getrandom as u32,
+    libc::SYS_getuid as u32,
+    libc::SYS_mmap as u32,
+    libc::SYS_mprotect as u32,
+    libc::SYS_munmap as u32,
+    libc::SYS_poll as u32,
+    libc::SYS_read as u32,
+    libc::SYS_recvfrom as u32,
+    libc::SYS_recvmsg as u32,
+    libc::SYS_rt_sigreturn as u32,
+    libc::SYS_sched_getaffinity as u32,
+    libc::SYS_sendmmsg as u32,
+    libc::SYS_sendto as u32,
+    libc::SYS_set_robust_list as u32,
+    libc::SYS_sigaltstack as u32,
+    libc::SYS_write as u32,
 ];
 
 static ALLOWED_SYSCALLS_FOR_FILE_READ: [u32; 5] = [
-    NR_access,
-    NR_fstat,
-    NR_lseek,
-    NR_readlink,
-    NR_stat,
+    libc::SYS_access as u32,
+    libc::SYS_fstat as u32,
+    libc::SYS_lseek as u32,
+    libc::SYS_readlink as u32,
+    libc::SYS_stat as u32,
 ];
 
 static ALLOWED_SYSCALLS_FOR_NETWORK_OUTBOUND: [u32; 3] = [
-    NR_bind,
-    NR_connect,
-    NR_getsockname,
+    libc::SYS_bind as u32,
+    libc::SYS_connect as u32,
+    libc::SYS_getsockname as u32,
 ];
 
 const ALLOW_SYSCALL: sock_filter = sock_filter {
@@ -264,13 +229,13 @@ impl Filter {
             filter.allow_syscalls(&ALLOWED_SYSCALLS_FOR_FILE_READ);
 
             // Only allow file reading.
-            filter.if_syscall_is(NR_open, |filter| {
+            filter.if_syscall_is(libc::SYS_open as u32, |filter| {
                 filter.if_arg1_hasnt_set(!(O_RDONLY | O_CLOEXEC | O_NOCTTY | O_NONBLOCK) as u32,
                                          |filter| filter.allow_this_syscall())
             });
 
             // Only allow the `FIONREAD` or `FIOCLEX` `ioctl`s to be performed.
-            filter.if_syscall_is(NR_ioctl, |filter| {
+            filter.if_syscall_is(libc::SYS_ioctl as u32, |filter| {
                 filter.if_arg1_is(FIONREAD as u32, |filter| filter.allow_this_syscall());
                 filter.if_arg1_is(FIOCLEX as u32, |filter| filter.allow_this_syscall())
             })
@@ -285,7 +250,7 @@ impl Filter {
             filter.allow_syscalls(&ALLOWED_SYSCALLS_FOR_NETWORK_OUTBOUND);
 
             // Only allow Unix, IPv4, IPv6, and netlink route sockets to be created.
-            filter.if_syscall_is(NR_socket, |filter| {
+            filter.if_syscall_is(libc::SYS_socket as u32, |filter| {
                 filter.if_arg0_is(AF_UNIX as u32, |filter| filter.allow_this_syscall());
                 filter.if_arg0_is(AF_INET as u32, |filter| filter.allow_this_syscall());
                 filter.if_arg0_is(AF_INET6 as u32, |filter| filter.allow_this_syscall());
@@ -296,7 +261,7 @@ impl Filter {
         }
 
         // Only allow normal threads to be created.
-        filter.if_syscall_is(NR_clone, |filter| {
+        filter.if_syscall_is(libc::SYS_clone as u32, |filter| {
             filter.if_arg0_is((CLONE_VM |
                                CLONE_FS |
                                CLONE_FILES |
@@ -310,7 +275,7 @@ impl Filter {
         });
 
         // Only allow the POSIX values for `madvise`.
-        filter.if_syscall_is(NR_madvise, |filter| {
+        filter.if_syscall_is(libc::SYS_madvise as u32, |filter| {
             for mode in [
                 MADV_NORMAL,
                 MADV_RANDOM,
@@ -332,7 +297,7 @@ impl Filter {
         let path = CString::from_slice(b"/tmp/gaol-bpf.XXXXXX");
         let mut path = path.as_bytes_with_nul().to_vec();
         let fd = unsafe {
-            mkstemp(path.as_mut_ptr() as *mut c_char)
+            libc::mkstemp(path.as_mut_ptr() as *mut c_char)
         };
         let nbytes = self.program.len() * mem::size_of::<sock_filter>();
         unsafe {
@@ -349,7 +314,7 @@ impl Filter {
     /// once.
     pub fn activate(&self) -> Result<(),c_int> {
         unsafe {
-            let result = prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+            let result = libc::prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
             if result != 0 {
                 return Err(result)
             }
@@ -358,11 +323,11 @@ impl Filter {
                 len: self.program.len() as c_ushort,
                 filter: self.program.as_ptr(),
             };
-            let result = prctl(PR_SET_SECCOMP,
-                               SECCOMP_MODE_FILTER,
-                               &program as *const sock_fprog as usize as c_ulong,
-                               !0,
-                               0);
+            let result = libc::prctl(PR_SET_SECCOMP,
+                                     SECCOMP_MODE_FILTER,
+                                     &program as *const sock_fprog as usize as c_ulong,
+                                     !0,
+                                     0);
             if result == 0 {
                 Ok(())
             } else {
@@ -446,11 +411,3 @@ struct sock_fprog {
     len: c_ushort,
     filter: *const sock_filter,
 }
-
-#[allow(dead_code)]
-extern {
-    fn mkstemp(template: *mut c_char) -> c_int;
-    pub fn prctl(option: c_int, arg2: c_ulong, arg3: c_ulong, arg4: c_ulong, arg5: c_ulong)
-                 -> c_int;
-}
-
