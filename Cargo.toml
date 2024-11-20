@@ -17,7 +17,7 @@ libc = "0.2"
 log = "0.4"
 
 [dev-dependencies]
-rand = "0.7"
+rand = "0.8"
 
 [[test]]
 name = "file-read-all"
