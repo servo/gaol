@@ -10,8 +10,8 @@
 
 //! Creation and destruction of sandboxes.
 
-use platform::process::{self, Process};
-use profile::Profile;
+use crate::platform::process::{self, Process};
+use crate::profile::Profile;
 
 use std::collections::HashMap;
 use std::convert::AsRef;
@@ -19,7 +19,7 @@ use std::env;
 use std::ffi::{CString, OsStr};
 use std::io;
 
-pub use platform::{ChildSandbox, Sandbox};
+pub use crate::platform::{ChildSandbox, Sandbox};
 
 /// All platform-specific sandboxes implement this trait.
 ///
@@ -37,11 +37,12 @@ pub trait SandboxMethods {
 pub trait ChildSandboxMethods {
     /// Activates the restrictions in this child process from here on out. Be sure to check the
     /// return value!
-    fn activate(&self) -> Result<(),()>;
+    fn activate(&self) -> Result<(), ()>;
 }
 
 fn cstring<T>(path: T) -> CString
-    where T: AsRef<OsStr>
+where
+    T: AsRef<OsStr>,
 {
     let path = path.as_ref();
     let bytes = if cfg!(windows) {
@@ -59,14 +60,17 @@ pub struct Command {
     /// The arguments to pass.
     pub args: Vec<CString>,
     /// The environment of the process.
-    pub env: HashMap<CString,CString>,
+    pub env: HashMap<CString, CString>,
 }
 
 impl Command {
     /// Constructs a new `Command` for launching the executable at path `module_path` with no
     /// arguments and no environment by default. Builder methods are provided to change these
     /// defaults and otherwise configure the process.
-    pub fn new<T>(module_path: T) -> Command where T: AsRef<OsStr> {
+    pub fn new<T>(module_path: T) -> Command
+    where
+        T: AsRef<OsStr>,
+    {
         Command {
             module_path: cstring(module_path),
             args: Vec::new(),
@@ -76,24 +80,33 @@ impl Command {
 
     /// Constructs a new `Command` for launching the current executable.
     pub fn me() -> io::Result<Command> {
-        Ok(Command::new(try!(env::current_exe())))
+        Ok(Command::new(env::current_exe()?))
     }
 
     /// Adds an argument to pass to the program.
-    pub fn arg<'a,T>(&'a mut self, arg: T) -> &'a mut Command where T: AsRef<OsStr> {
+    pub fn arg<T>(&mut self, arg: T) -> &mut Command
+    where
+        T: AsRef<OsStr>,
+    {
         self.args.push(cstring(arg));
         self
     }
 
     /// Adds multiple arguments to pass to the program.
-    pub fn args<'a,T>(&'a mut self, args: &[T]) -> &'a mut Command where T: AsRef<OsStr> {
+    pub fn args<T>(&mut self, args: &[T]) -> &mut Command
+    where
+        T: AsRef<OsStr>,
+    {
         self.args.extend(args.iter().map(cstring));
         self
     }
 
     /// Inserts or updates an environment variable mapping.
-    pub fn env<'a,T,U>(&'a mut self, key: T, val: U) -> &'a mut Command
-                       where T: AsRef<OsStr>, U: AsRef<OsStr> {
+    pub fn env<T, U>(&mut self, key: T, val: U) -> &mut Command
+    where
+        T: AsRef<OsStr>,
+        U: AsRef<OsStr>,
+    {
         self.env.insert(cstring(key), cstring(val));
         self
     }

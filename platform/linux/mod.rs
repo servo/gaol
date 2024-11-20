@@ -8,10 +8,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use platform::linux::seccomp::Filter;
-use platform::unix::process::Process;
-use profile::{self, AddressPattern, OperationSupport, OperationSupportLevel, Profile};
-use sandbox::{ChildSandboxMethods, Command, SandboxMethods};
+use crate::platform::linux::seccomp::Filter;
+use crate::platform::unix::process::Process;
+use crate::profile::{self, AddressPattern, OperationSupport, OperationSupportLevel, Profile};
+use crate::sandbox::{ChildSandboxMethods, Command, SandboxMethods};
 
 use std::io;
 
@@ -48,7 +48,7 @@ pub struct Sandbox {
 impl Sandbox {
     pub fn new(profile: Profile) -> Sandbox {
         Sandbox {
-            profile: profile,
+            profile,
         }
     }
 
@@ -80,7 +80,7 @@ pub struct ChildSandbox {
 impl ChildSandbox {
     pub fn new(profile: Profile) -> ChildSandbox {
         ChildSandbox {
-            profile: profile,
+            profile,
         }
     }
 }

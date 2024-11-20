@@ -10,13 +10,12 @@
 
 //! Sandboxing on Linux via namespaces.
 
-use platform::linux::seccomp;
-use platform::unix::process::Process;
-use platform::unix;
-use profile::{Operation, PathPattern, Profile};
-use sandbox::Command;
+use crate::platform::unix;
+use crate::platform::unix::process::Process;
+use crate::profile::{Operation, PathPattern, Profile};
+use crate::sandbox::Command;
 
-use libc::{self, c_char, c_int, c_ulong, c_void, gid_t, pid_t, size_t, ssize_t, uid_t};
+use libc::{self, c_char, c_int, c_void, gid_t, pid_t, size_t, ssize_t, uid_t};
 use std::env;
 use std::ffi::{CString, OsStr, OsString};
 use std::fs::{self, File};
@@ -28,9 +27,9 @@ use std::path::{Path, PathBuf};
 use std::ptr;
 
 /// Creates a namespace and sets up a chroot jail.
-pub fn activate(profile: &Profile) -> Result<(),c_int> {
-    let jail = try!(ChrootJail::new(profile));
-    try!(jail.enter());
+pub fn activate(profile: &Profile) -> Result<(), c_int> {
+    let jail = ChrootJail::new(profile)?;
+    jail.enter()?;
     drop_capabilities()
 }
 
@@ -75,7 +74,7 @@ impl ChrootJail {
             match *operation {
                 Operation::FileReadAll(PathPattern::Literal(ref path)) |
                 Operation::FileReadAll(PathPattern::Subpath(ref path)) => {
-                    try!(jail.bind_mount(path));
+                    jail.bind_mount(path)?;
                 }
                 _ => {}
             }
@@ -190,15 +189,17 @@ fn drop_capabilities() -> Result<(),c_int> {
 /// Sets up the user and PID namespaces.
 unsafe fn prepare_user_and_pid_namespaces(parent_uid: uid_t, parent_gid: gid_t) -> io::Result<()> {
     // Enter the main user and PID namespaces.
-    assert!(libc::unshare(libc::CLONE_NEWUSER | libc::CLONE_NEWPID) == 0);
+    assert_eq!(libc::unshare(libc::CLONE_NEWUSER | libc::CLONE_NEWPID), 0);
 
     // See http://crbug.com/457362 for more information on this.
-    try!(try!(File::create(&Path::new("/proc/self/setgroups"))).write_all(b"deny"));
+    File::create(&Path::new("/proc/self/setgroups"))?.write_all(b"deny")?;
 
     let gid_contents = format!("0 {} 1", parent_gid);
-    try!(try!(File::create(&Path::new("/proc/self/gid_map"))).write_all(gid_contents.as_bytes()));
+    File::create(&Path::new("/proc/self/gid_map"))?.write_all(gid_contents.as_bytes())?;
+
     let uid_contents = format!("0 {} 1", parent_uid);
-    try!(try!(File::create(&Path::new("/proc/self/uid_map"))).write_all(uid_contents.as_bytes()));
+    File::create(&Path::new("/proc/self/uid_map"))?.write_all(uid_contents.as_bytes())?;
+
     Ok(())
 }
 
@@ -227,11 +228,11 @@ pub fn start(profile: &Profile, command: &mut Command) -> io::Result<Process> {
     unsafe {
         // Create a pipe so we can communicate the PID of our grandchild back.
         let mut pipe_fds = [0, 0];
-        assert!(libc::pipe(&mut pipe_fds[0]) == 0);
+        assert_eq!(libc::pipe(&mut pipe_fds[0]), 0);
 
         // Set this `prctl` flag so that we can wait on our grandchild. (Otherwise it'll be
         // reparented to init.)
-        assert!(libc::prctl(libc::PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) == 0);
+        assert_eq!(libc::prctl(libc::PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0), 0);
 
         // Fork so that we can unshare without removing our ability to create threads.
         if libc::fork() == 0 {
@@ -240,13 +241,13 @@ pub fn start(profile: &Profile, command: &mut Command) -> io::Result<Process> {
 
             // Set up our user and PID namespaces. The PID namespace won't actually come into
             // effect until the next fork(), because PIDs are immutable.
-            prepare_user_and_pid_namespaces(parent_uid, parent_gid).unwrap();
+            prepare_user_and_pid_namespaces(parent_uid, parent_gid)?;
 
             // Fork again, to enter the PID namespace.
             match libc::fork() {
                 0 => {
                     // Enter the auxiliary namespaces.
-                    assert!(libc::unshare(unshare_flags) == 0);
+                    assert_eq!(libc::unshare(unshare_flags), 0);
 
                     // Go ahead and start the command.
                     drop(unix::process::exec(command));
@@ -254,10 +255,14 @@ pub fn start(profile: &Profile, command: &mut Command) -> io::Result<Process> {
                 }
                 grandchild_pid => {
                     // Send the PID of our child up to our parent and exit.
-                    assert!(libc::write(pipe_fds[1],
-                                        &grandchild_pid as *const pid_t as *const c_void,
-                                        mem::size_of::<pid_t>() as size_t) ==
-                                            mem::size_of::<pid_t>() as ssize_t);
+                    assert_eq!(
+                        libc::write(
+                            pipe_fds[1],
+                            &grandchild_pid as *const pid_t as *const c_void,
+                            mem::size_of::<pid_t>() as size_t
+                        ),
+                        mem::size_of::<pid_t>() as ssize_t
+                    );
                     libc::exit(0);
                 }
             }
@@ -268,10 +273,15 @@ pub fn start(profile: &Profile, command: &mut Command) -> io::Result<Process> {
 
         // Retrieve our grandchild's PID.
         let mut grandchild_pid: pid_t = 0;
-        assert!(libc::read(pipe_fds[0],
-                           &mut grandchild_pid as *mut i32 as *mut c_void,
-                           mem::size_of::<pid_t>() as size_t) ==
-                mem::size_of::<pid_t>() as ssize_t);
+        assert_eq!(
+            libc::read(
+                pipe_fds[0],
+                &mut grandchild_pid as *mut i32 as *mut c_void,
+                mem::size_of::<pid_t>() as size_t
+            ),
+            mem::size_of::<pid_t>() as ssize_t
+        );
+
         Ok(Process {
             pid: grandchild_pid,
         })

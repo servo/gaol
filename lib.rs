@@ -8,23 +8,18 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[macro_use]
-extern crate log;
-
-extern crate libc;
-
 pub mod profile;
 pub mod sandbox;
 
 pub mod platform {
     #[cfg(any(target_os="android", target_os="linux"))]
-    pub use platform::linux::{ChildSandbox, Operation, Sandbox};
+    pub use self::linux::{ChildSandbox, Operation, Sandbox};
     #[cfg(target_os="macos")]
-    pub use platform::macos::{ChildSandbox, Operation, Sandbox};
+    pub use self::macos::{ChildSandbox, Operation, Sandbox};
     #[cfg(target_os="freebsd")]
-    pub use platform::freebsd::{ChildSandbox, Operation, Sandbox};
+    pub use self::freebsd::{ChildSandbox, Operation, Sandbox};
     #[cfg(any(target_os="android", target_os="linux", target_os="macos", target_os="freebsd"))]
-    pub use platform::unix::process::{self, Process};
+    pub use self::unix::process::{self, Process};
 
     #[cfg(any(target_os="android", target_os="linux"))]
     pub mod linux;

@@ -6,6 +6,7 @@ license = "MIT/Apache-2.0"
 documentation = "https://docs.rs/gaol"
 repository = "https://github.com/servo/gaol"
 description = "OS-level application sandboxing library"
+edition = "2021"
 
 [lib]
 name = "gaol"

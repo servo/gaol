@@ -10,7 +10,7 @@
 
 //! Sandbox profiles—lists of permitted operations.
 
-use platform;
+use crate::platform;
 
 use std::path::PathBuf;
 
@@ -127,7 +127,7 @@ impl Profile {
     /// be allowed and modify the set of allowed operations as necessary. We are deliberately
     /// strict here to reduce the probability of applications accidentally allowing operations due
     /// to platform limitations.
-    pub fn new(allowed_operations: Vec<Operation>) -> Result<Profile,()> {
+    pub fn new(allowed_operations: Vec<Operation>) -> Result<Profile, ()> {
         if allowed_operations.iter().all(|operation| {
             match operation.support() {
                 OperationSupportLevel::NeverAllowed | OperationSupportLevel::CanBeAllowed => true,
@@ -136,7 +136,7 @@ impl Profile {
             }
         }) {
             Ok(Profile {
-                allowed_operations: allowed_operations,
+                allowed_operations,
             })
         } else {
             Err(())
