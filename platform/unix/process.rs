@@ -10,7 +10,7 @@
 
 //! Child process management on POSIX systems.
 
-use sandbox::Command;
+use crate::sandbox::Command;
 
 use libc::{execve, fork, pid_t, waitpid, WEXITSTATUS, WIFEXITED, WTERMSIG};
 use std::ffi::CString;
@@ -53,7 +53,7 @@ pub fn spawn(command: &Command) -> io::Result<Process> {
                 drop(exec(command));
                 panic!()
             }
-            pid => Ok(Process { pid: pid }),
+            pid => Ok(Process { pid }),
         }
     }
 }
@@ -76,12 +76,10 @@ impl Process {
             }
         }
 
-        unsafe {
-            if WIFEXITED(stat) {
-                Ok(ExitStatus::Code(WEXITSTATUS(stat) as i32))
-            } else {
-                Ok(ExitStatus::Signal(WTERMSIG(stat) as i32))
-            }
+        if WIFEXITED(stat) {
+            Ok(ExitStatus::Code(WEXITSTATUS(stat) as i32))
+        } else {
+            Ok(ExitStatus::Signal(WTERMSIG(stat) as i32))
         }
     }
 }

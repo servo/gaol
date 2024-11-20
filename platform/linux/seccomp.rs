@@ -16,7 +16,7 @@
 
 #![allow(non_upper_case_globals, unused_imports)]
 
-use profile::{Operation, Profile};
+use crate::profile::{Operation, Profile};
 
 use libc::{self, CLONE_CHILD_CLEARTID, CLONE_FILES, CLONE_FS,
            CLONE_PARENT_SETTID, CLONE_SETTLS, CLONE_SIGHAND, CLONE_SYSVSEM,
@@ -294,15 +294,21 @@ impl Filter {
     /// Dumps this filter to a temporary file.
     #[cfg(dump_bpf_sockets)]
     pub fn dump(&self) {
-        let path = CString::from_slice(b"/tmp/gaol-bpf.XXXXXX");
+        let path = CString::new(b"/tmp/gaol-bpf.XXXXXX").expect("CString::new failed");
         let mut path = path.as_bytes_with_nul().to_vec();
         let fd = unsafe {
             libc::mkstemp(path.as_mut_ptr() as *mut c_char)
         };
         let nbytes = self.program.len() * mem::size_of::<sock_filter>();
         unsafe {
-            assert!(libc::write(fd, self.program.as_ptr() as *const c_void, nbytes as u64) ==
-                    nbytes as i64);
+            assert_eq!(
+                libc::write(
+                    fd,
+                    self.program.as_ptr() as *const c_void,
+                    nbytes
+                ),
+                nbytes as isize
+            );
             libc::close(fd);
         }
     }
