@@ -8,7 +8,7 @@ See `examples/example.rs` and the tests for examples of usage.
 
 *At the moment, `gaol` is only lightly reviewed for correctness and security.* It should not be considered mature or "battle-tested". Use at your own risk.
 
-[Documentation](https://doc.servo.org/gaol/index.html)
+[Documentation](https://docs.rs/gaol)
 
 ## Operation
 
