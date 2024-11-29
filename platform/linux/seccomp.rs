@@ -23,7 +23,7 @@ use libc::{self, CLONE_CHILD_CLEARTID, CLONE_FILES, CLONE_FS,
            CLONE_THREAD, CLONE_VM};
 use libc::{AF_INET, AF_INET6, AF_UNIX, AF_NETLINK};
 use libc::{c_char, c_int, c_ulong, c_ushort, c_void};
-use libc::{O_NONBLOCK, O_RDONLY, O_NOCTTY, O_CLOEXEC, FIONREAD, FIOCLEX};
+use libc::{O_NONBLOCK, O_RDONLY, O_NOCTTY, O_CLOEXEC, O_DIRECTORY, O_NOFOLLOW, FIONREAD, FIOCLEX};
 use libc::{MADV_NORMAL, MADV_RANDOM, MADV_SEQUENTIAL, MADV_WILLNEED, MADV_DONTNEED};
 use std::ffi::CString;
 use std::mem;
@@ -113,7 +113,7 @@ static FILTER_EPILOGUE: [sock_filter; 1] = [
 ];
 
 /// Syscalls that are always allowed.
-pub static ALLOWED_SYSCALLS: [u32; 21] = [
+pub static ALLOWED_SYSCALLS: [u32; 22] = [
     libc::SYS_brk as u32,
     libc::SYS_close as u32,
     libc::SYS_exit as u32,
@@ -135,6 +135,7 @@ pub static ALLOWED_SYSCALLS: [u32; 21] = [
     libc::SYS_set_robust_list as u32,
     libc::SYS_sigaltstack as u32,
     libc::SYS_write as u32,
+    libc::SYS_fcntl as u32,
 ];
 
 static ALLOWED_SYSCALLS_FOR_FILE_READ: [u32; 5] = [
@@ -231,6 +232,10 @@ impl Filter {
             // Only allow file reading.
             filter.if_syscall_is(libc::SYS_open as u32, |filter| {
                 filter.if_arg1_hasnt_set(!(O_RDONLY | O_CLOEXEC | O_NOCTTY | O_NONBLOCK) as u32,
+                                         |filter| filter.allow_this_syscall())
+            });
+            filter.if_syscall_is(libc::SYS_openat as u32, |filter| {
+                filter.if_arg2_hasnt_set(!(O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOCTTY | O_NONBLOCK | O_NOFOLLOW) as u32,
                                          |filter| filter.allow_this_syscall())
             });
 
@@ -375,6 +380,11 @@ impl Filter {
     fn if_arg2_is<F>(&mut self, value: u32, then: F) where F: FnMut(&mut Filter) {
         self.program.push(EXAMINE_ARG_2);
         self.if_k_is(value, then)
+    }
+
+    fn if_arg2_hasnt_set<F>(&mut self, value: u32, then: F) where F: FnMut(&mut Filter) {
+        self.program.push(EXAMINE_ARG_2);
+        self.if_k_hasnt_set(value, then)
     }
 
     fn if_k_is<F>(&mut self, value: u32, mut then: F) where F: FnMut(&mut Filter) {

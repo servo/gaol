@@ -8,9 +8,8 @@ extern crate rand;
 use gaol::profile::{Operation, PathPattern, Profile};
 use gaol::sandbox::{ChildSandbox, ChildSandboxMethods, Command, Sandbox, SandboxMethods};
 use libc::c_char;
-use rand::Rng;
-use rand::distributions::Alphanumeric;
-use std::env;
+use rand::distributions::{Alphanumeric, DistString};
+use std::{env, process};
 use std::ffi::{CString, OsStr};
 use std::fs::{self, File};
 use std::io::Write;
@@ -35,14 +34,21 @@ fn prohibition_profile() -> Result<Profile,()> {
 fn allowance_test() {
     let path = PathBuf::from(env::var("GAOL_TEMP_FILE").unwrap());
     if ChildSandbox::new(allowance_profile(&path).unwrap()).activate().is_ok() {
-        drop(fs::metadata(path).unwrap())
+        match fs::metadata(path) {
+            Err(_) => process::exit(31),
+            _ => {},
+        }
     }
 }
 
 fn prohibition_test() {
     let path = PathBuf::from(env::var("GAOL_TEMP_FILE").unwrap());
     ChildSandbox::new(prohibition_profile().unwrap()).activate().unwrap();
-    drop(fs::metadata(path).unwrap())
+
+    match fs::metadata(path) {
+        Err(_) => process::exit(31),
+        _ => {},
+    }
 }
 
 pub fn main() {
@@ -59,15 +65,13 @@ pub fn main() {
         let c_temp_path =
             CString::new(temp_path.as_os_str().to_str().unwrap().as_bytes()).unwrap();
         let mut new_temp_path = [0u8; PATH_MAX];
-        drop(realpath(c_temp_path.as_ptr(), new_temp_path.as_mut_ptr() as *mut c_char));
+        realpath(c_temp_path.as_ptr(), new_temp_path.as_mut_ptr() as *mut c_char);
         let pos = new_temp_path.iter().position(|&x| x == 0).unwrap();
         temp_path = PathBuf::from(OsStr::from_bytes(&new_temp_path[..pos]));
     }
 
-    let mut rng = rand::thread_rng();
-    let suffix: String = std::iter::repeat(())
-        .map(|()| rng.sample(Alphanumeric))
-        .take(6).collect();
+    let suffix = Alphanumeric.sample_string(&mut rand::thread_rng(), 6);
+
     temp_path.push(format!("gaoltest.{}", suffix));
     File::create(&temp_path).unwrap().write_all(b"super secret\n").unwrap();
 

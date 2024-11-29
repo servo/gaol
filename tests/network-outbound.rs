@@ -5,7 +5,7 @@ extern crate gaol;
 
 use gaol::profile::{AddressPattern, Operation, Profile};
 use gaol::sandbox::{ChildSandbox, ChildSandboxMethods, Command, Sandbox, SandboxMethods};
-use std::env;
+use std::{env, process};
 use std::net::{TcpListener, TcpStream};
 
 static ADDRESS: &'static str = "127.0.0.1:7357";
@@ -20,12 +20,20 @@ fn prohibition_profile() -> Profile {
 
 fn allowance_test() {
     ChildSandbox::new(allowance_profile()).activate().unwrap();
-    drop(TcpStream::connect(ADDRESS).unwrap())
+
+    match TcpStream::connect(ADDRESS) {
+        Err(_) => process::exit(31),
+        _ => {},
+    }
 }
 
 fn prohibition_test() {
     ChildSandbox::new(prohibition_profile()).activate().unwrap();
-    drop(TcpStream::connect(ADDRESS).unwrap())
+
+    match TcpStream::connect(ADDRESS) {
+        Err(_) => process::exit(31),
+        _ => {},
+    }
 }
 
 pub fn main() {
