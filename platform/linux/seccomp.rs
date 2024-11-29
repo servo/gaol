@@ -14,7 +14,7 @@
 //! the weaker of the two approaches, because BPF is limited, but it's useful for reducing kernel
 //! attack surface area and implementing coarse-grained policies.
 
-#![allow(non_upper_case_globals, unused_imports)]
+#![allow(non_upper_case_globals, dead_code)]
 
 use crate::profile::{Operation, Profile};
 
@@ -22,11 +22,8 @@ use libc::{self, CLONE_CHILD_CLEARTID, CLONE_FILES, CLONE_FS,
            CLONE_PARENT_SETTID, CLONE_SETTLS, CLONE_SIGHAND, CLONE_SYSVSEM,
            CLONE_THREAD, CLONE_VM};
 use libc::{AF_INET, AF_INET6, AF_UNIX, AF_NETLINK};
-use libc::{c_char, c_int, c_ulong, c_ushort, c_void};
-use libc::{O_NONBLOCK, O_RDONLY, O_NOCTTY, O_CLOEXEC, O_DIRECTORY, O_NOFOLLOW, FIONREAD, FIOCLEX};
+use libc::{c_int, c_ulong, c_ushort};
 use libc::{MADV_NORMAL, MADV_RANDOM, MADV_SEQUENTIAL, MADV_WILLNEED, MADV_DONTNEED};
-use std::ffi::CString;
-use std::mem;
 
 /// The architecture number for x86.
 #[cfg(target_arch="x86")]
@@ -113,7 +110,7 @@ static FILTER_EPILOGUE: [sock_filter; 1] = [
 ];
 
 /// Syscalls that are always allowed.
-pub static ALLOWED_SYSCALLS: [u32; 22] = [
+pub static ALLOWED_SYSCALLS: [u32; 54] = [
     libc::SYS_brk as u32,
     libc::SYS_close as u32,
     libc::SYS_exit as u32,
@@ -121,6 +118,7 @@ pub static ALLOWED_SYSCALLS: [u32; 22] = [
     libc::SYS_futex as u32,
     libc::SYS_getrandom as u32,
     libc::SYS_getuid as u32,
+    libc::SYS_getpid as u32,
     libc::SYS_mmap as u32,
     libc::SYS_mprotect as u32,
     libc::SYS_munmap as u32,
@@ -136,6 +134,37 @@ pub static ALLOWED_SYSCALLS: [u32; 22] = [
     libc::SYS_sigaltstack as u32,
     libc::SYS_write as u32,
     libc::SYS_fcntl as u32,
+    libc::SYS_prlimit64 as u32,
+    libc::SYS_rt_sigaction as u32,
+    libc::SYS_rt_sigprocmask as u32,
+    libc::SYS_clone3 as u32,
+    libc::SYS_prctl as u32,
+    libc::SYS_rseq as u32,
+    libc::SYS_gettid as u32,
+    libc::SYS_ioctl as u32,
+    libc::SYS_socketpair as u32,
+    libc::SYS_sendmsg as u32,
+    libc::SYS_epoll_create1 as u32,
+    libc::SYS_epoll_ctl as u32,
+    libc::SYS_epoll_wait as u32,
+    libc::SYS_sched_yield as u32,
+    libc::SYS_statx as u32,
+    libc::SYS_openat as u32,
+    libc::SYS_open as u32,
+    libc::SYS_pipe2 as u32,
+    libc::SYS_mincore as u32,
+    libc::SYS_getcwd as u32,
+    libc::SYS_newfstatat as u32,
+    libc::SYS_getdents64 as u32,
+    libc::SYS_memfd_create as u32,
+    libc::SYS_ftruncate as u32,
+    libc::SYS_truncate as u32,
+    libc::SYS_dup as u32,
+    libc::SYS_mremap as u32,
+    libc::SYS_getrusage as u32,
+    libc::SYS_clock_nanosleep as u32,
+    libc::SYS_clock_gettime as u32,
+    libc::SYS_gettimeofday as u32,
 ];
 
 static ALLOWED_SYSCALLS_FOR_FILE_READ: [u32; 5] = [
@@ -228,22 +257,6 @@ impl Filter {
             }
         }) {
             filter.allow_syscalls(&ALLOWED_SYSCALLS_FOR_FILE_READ);
-
-            // Only allow file reading.
-            filter.if_syscall_is(libc::SYS_open as u32, |filter| {
-                filter.if_arg1_hasnt_set(!(O_RDONLY | O_CLOEXEC | O_NOCTTY | O_NONBLOCK) as u32,
-                                         |filter| filter.allow_this_syscall())
-            });
-            filter.if_syscall_is(libc::SYS_openat as u32, |filter| {
-                filter.if_arg2_hasnt_set(!(O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOCTTY | O_NONBLOCK | O_NOFOLLOW) as u32,
-                                         |filter| filter.allow_this_syscall())
-            });
-
-            // Only allow the `FIONREAD` or `FIOCLEX` `ioctl`s to be performed.
-            filter.if_syscall_is(libc::SYS_ioctl as u32, |filter| {
-                filter.if_arg1_is(FIONREAD as u32, |filter| filter.allow_this_syscall());
-                filter.if_arg1_is(FIOCLEX as u32, |filter| filter.allow_this_syscall())
-            })
         }
 
         if profile.allowed_operations().iter().any(|operation| {
@@ -299,12 +312,16 @@ impl Filter {
     /// Dumps this filter to a temporary file.
     #[cfg(dump_bpf_sockets)]
     pub fn dump(&self) {
+        use std::ffi::CString;
+        use std::mem::size_of;
+        use libc::{c_char, c_void};
+
         let path = CString::new(b"/tmp/gaol-bpf.XXXXXX").expect("CString::new failed");
         let mut path = path.as_bytes_with_nul().to_vec();
         let fd = unsafe {
             libc::mkstemp(path.as_mut_ptr() as *mut c_char)
         };
-        let nbytes = self.program.len() * mem::size_of::<sock_filter>();
+        let nbytes = self.program.len() * size_of::<sock_filter>();
         unsafe {
             assert_eq!(
                 libc::write(

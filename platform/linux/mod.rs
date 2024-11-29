@@ -90,9 +90,11 @@ impl ChildSandboxMethods for ChildSandbox {
         if namespace::activate(&self.profile).is_err() {
             return Err(())
         }
-        if misc::activate().is_err() {
-            return Err(())
-        }
+        // This is incompatible with many syscalls, but the idea itself is not bad.
+        // After a refactor it may be useful again
+        // if misc::activate().is_err() {
+        //     return Err(())
+        // }
         match Filter::new(&self.profile).activate() {
             Ok(_) => Ok(()),
             Err(_) => Err(()),
