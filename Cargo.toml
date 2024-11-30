@@ -44,3 +44,5 @@ name = "system-info-read"
 path = "tests/system-info-read.rs"
 harness = false
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(dump_bpf_sockets)'] }

@@ -335,9 +335,6 @@ impl Filter {
         }
     }
 
-    #[cfg(not(dump_bpf_sockets))]
-    pub fn dump(&self) {}
-
     /// Activates this filter, applying all of its restrictions forevermore. This can only be done
     /// once.
     pub fn activate(&self) -> Result<(),c_int> {
