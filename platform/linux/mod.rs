@@ -57,9 +57,6 @@ impl Sandbox {
         let filter = Filter::new(&self.profile);
         filter.dump();
     }
-
-    #[cfg(not(dump_bpf_sockets))]
-    fn dump_filter(&self) {}
 }
 
 impl SandboxMethods for Sandbox {
@@ -68,6 +65,7 @@ impl SandboxMethods for Sandbox {
     }
 
     fn start(&self, command: &mut Command) -> io::Result<Process> {
+        #[cfg(dump_bpf_sockets)]
         self.dump_filter();
         namespace::start(&self.profile, command)
     }
@@ -90,9 +88,11 @@ impl ChildSandboxMethods for ChildSandbox {
         if namespace::activate(&self.profile).is_err() {
             return Err(())
         }
-        if misc::activate().is_err() {
-            return Err(())
-        }
+        // This is incompatible with many syscalls, but the idea itself is not bad.
+        // After a refactor it may be useful again
+        // if misc::activate().is_err() {
+        //     return Err(())
+        // }
         match Filter::new(&self.profile).activate() {
             Ok(_) => Ok(()),
             Err(_) => Err(()),
